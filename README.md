@@ -75,5 +75,5 @@ O objetivo principal é demonstrar a integração prática entre back-end estrut
 
 ### 1. Clonar o Repositório
 ```bash
-git clone [https://github.com/joaogabrielkaw-coder/NOME-DO-SEU-REPOSITORIO.git](https://github.com/joaogabrielkaw-coder/Google-Aps)
+git clone [https://github.com/joaogabrielkaw-coder/Google-Aps.git](https://github.com/joaogabrielkaw-coder/Google-Aps)
 cd Google-Aps

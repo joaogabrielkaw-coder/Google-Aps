@@ -1,0 +1,8 @@
+{
+  "firestore": [
+    {
+      "database": "ai-studio-android-devrouti-2b37712a-bcfc-487f-9b1b-917199bffc52",
+      "rules": "firestore.rules"
+    }
+  ]
+}

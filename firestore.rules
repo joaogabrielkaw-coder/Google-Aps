@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.displayName is string &&
+             data.displayName.size() > 0 &&
+             data.displayName.size() <= 100 &&
+             data.totalScore is number &&
+             data.totalScore >= 0;
+    }
+
+    function isValidLeaderboardEntry(data) {
+      return data.userId is string &&
+             data.userId == request.auth.uid &&
+             data.displayName is string &&
+             data.displayName.size() > 0 &&
+             data.displayName.size() <= 100 &&
+             data.totalScore is number &&
+             data.totalScore >= 0;
+    }
+
+    // Private User Profile
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    // Public Dev Scoreboard / Leaderboard
+    match /leaderboard/{userId} {
+      allow read: if true;
+      allow create, update: if isOwner(userId) && isValidLeaderboardEntry(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+  }
+}

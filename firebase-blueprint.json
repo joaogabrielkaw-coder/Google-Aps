@@ -1,0 +1,133 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with authentication and contact details",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique user authentication identifier"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address if authenticated via Google"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "User phone or student number"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Profile picture URL"
+        },
+        "authProvider": {
+          "type": "string",
+          "description": "Authentication method used (google or phone)"
+        },
+        "totalScore": {
+          "type": "number",
+          "description": "Cumulative developer XP points"
+        },
+        "levelNumber": {
+          "type": "number",
+          "description": "Developer ranking level"
+        },
+        "levelTitle": {
+          "type": "string",
+          "description": "Developer ranking title"
+        },
+        "streakDays": {
+          "type": "number",
+          "description": "Current consecutive study streak days"
+        },
+        "completedActivitiesCount": {
+          "type": "number",
+          "description": "Total coding activities completed"
+        },
+        "badgesCount": {
+          "type": "number",
+          "description": "Total unlocked badges count"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account registration timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Profile last updated timestamp"
+        }
+      },
+      "required": ["userId", "displayName", "authProvider", "totalScore"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Public developer scoreboard entry displaying ranking and score",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Unique developer ID"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Public display name"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Masked or formatted contact number"
+        },
+        "photoUrl": {
+          "type": "string",
+          "description": "Avatar or photo URL"
+        },
+        "authProvider": {
+          "type": "string",
+          "description": "Sign-in method"
+        },
+        "totalScore": {
+          "type": "number",
+          "description": "Current total score / XP on the leaderboard"
+        },
+        "levelNumber": {
+          "type": "number",
+          "description": "Developer level tier (1-5)"
+        },
+        "levelTitle": {
+          "type": "string",
+          "description": "Developer level title"
+        },
+        "streakDays": {
+          "type": "number",
+          "description": "Study streak in days"
+        },
+        "badgesCount": {
+          "type": "number",
+          "description": "Number of earned badges"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Scoreboard entry timestamp"
+        }
+      },
+      "required": ["userId", "displayName", "totalScore"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user profile documents"
+    },
+    "/leaderboard/{userId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Public developer leaderboard and scoreboard collection"
+    }
+  }
+}

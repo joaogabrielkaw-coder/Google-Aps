@@ -1,0 +1,6 @@
+{
+  "name": "DevRoutine AI",
+  "description": "Aplicativo de estudos para Python, SQL, HTML, CSS, Java, MySQL, PostgreSQL e MongoDB com rotinas personalizadas por IA, calendário e suporte a Português e Inglês.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

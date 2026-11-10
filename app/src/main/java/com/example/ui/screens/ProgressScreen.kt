@@ -68,11 +68,14 @@ import com.example.ui.theme.RedAccent
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+import com.example.data.repository.LanguageDailyProgress
+
 @Composable
 fun ProgressScreen(
     language: Language,
     scoreInfo: UserScoreInfo,
     badges: List<UserBadgeEntity> = emptyList(),
+    todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
     getTechScore: (Technology) -> Int,
     onOpenTechDetail: (Technology) -> Unit
 ) {
@@ -294,6 +297,93 @@ fun ProgressScreen(
                             completedCount = (scoreInfo.completedActivitiesCount / 3).coerceAtLeast(0),
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                }
+            }
+        }
+
+        // 3b. Daily Study Progress Tracker in Firestore Breakdown
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = CardDefaults.outlinedCardBorder().copy(width = 1.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (isPt) "🔥 Registro Diário no Cloud Firestore" else "🔥 Daily Cloud Firestore Record",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (isPt) "Progresso salvo na nuvem por linguagem selecionada hoje"
+                        else "Cloud-persisted progress per selected language today",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Technology.values().forEach { tech ->
+                        val prog = todayProgressMap[tech.id]
+                        val xp = prog?.xpEarned ?: 0
+                        val challenges = prog?.completedChallengesCount ?: 0
+                        val minutes = prog?.minutesStudied ?: 0
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onOpenTechDetail(tech) }
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(if (xp > 0 || minutes > 0) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = tech.displayName,
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                )
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (minutes > 0) {
+                                    Text(
+                                        text = "${minutes}m",
+                                        style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                                if (challenges > 0) {
+                                    Text(
+                                        text = "${challenges} des.",
+                                        style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (xp > 0) PurplePrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.5f)
+                                ) {
+                                    Text(
+                                        text = "+$xp XP",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (xp > 0) PurplePrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                        ),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

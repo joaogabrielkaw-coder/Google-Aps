@@ -47,6 +47,7 @@ import com.example.ui.screens.AiChatScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LeaderboardScreen
+import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.ProgressScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.TechDetailScreen
@@ -118,6 +119,8 @@ fun MainAppContainer(
     val userAccount by viewModel.userAccount.collectAsState()
     val isAuthLoading by viewModel.isAuthLoading.collectAsState()
     val leaderboardEntries by viewModel.leaderboardEntries.collectAsState()
+    val trackerSelectedTech by viewModel.trackerSelectedTech.collectAsState()
+    val todayProgressMap by viewModel.todayLanguageProgressMap.collectAsState()
 
     var showAuthDialog by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -126,7 +129,7 @@ fun MainAppContainer(
     val serverClientId = try {
         context.getString(R.string.default_web_client_id)
     } catch (e: Exception) {
-        "188401334450-5nqlrid83amqbc0p3unt2557rkovdb8i.apps.googleusercontent.com"
+        ""
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -146,7 +149,7 @@ fun MainAppContainer(
     }
 
     // Back handling for sub-screens
-    BackHandler(enabled = destination != AppDestination.HOME) {
+    BackHandler(enabled = destination != AppDestination.HOME && destination != AppDestination.LOGIN) {
         if (destination == AppDestination.TECH_DETAIL) {
             viewModel.navigateTo(AppDestination.TECH_HUB)
         } else {
@@ -154,44 +157,71 @@ fun MainAppContainer(
         }
     }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("app_scaffold"),
-        topBar = {
-            if (destination != AppDestination.TECH_DETAIL) {
-                AppTopBar(
-                    currentLanguage = currentLanguage,
-                    currentTheme = currentTheme,
-                    userAccount = userAccount,
-                    onToggleLanguage = {
-                        viewModel.setLanguage(if (currentLanguage == Language.PT) Language.EN else Language.PT)
-                    },
-                    onToggleTheme = {
-                        val nextTheme = if (currentTheme == ThemePreference.DARK) ThemePreference.LIGHT else ThemePreference.DARK
-                        viewModel.setThemePreference(nextTheme)
-                    },
-                    onOpenLeaderboard = {
-                        viewModel.navigateTo(AppDestination.LEADERBOARD)
-                    },
-                    onOpenAuth = {
-                        showAuthDialog = true
-                    }
+    if (destination == AppDestination.LOGIN) {
+        LoginScreen(
+            language = currentLanguage,
+            isLoading = isAuthLoading,
+            onToggleLanguage = {
+                viewModel.setLanguage(if (currentLanguage == Language.PT) Language.EN else Language.PT)
+            },
+            onGoogleSignInSuccess = { idToken, name, email, photo ->
+                viewModel.loginWithGoogle(
+                    idToken = idToken,
+                    displayName = name,
+                    email = email,
+                    photoUrl = photo
                 )
+            },
+            onPhoneSignInSuccess = { name, phone ->
+                viewModel.loginWithPhoneNumber(name, phone)
+            },
+            onExploreWithoutAuth = {
+                viewModel.navigateTo(AppDestination.HOME)
             }
-        },
-        bottomBar = {
-            AppBottomNav(
-                currentDestination = destination,
-                language = currentLanguage,
-                onNavigate = { dest -> viewModel.navigateTo(dest) }
-            )
-        }
-    ) { paddingValues ->
-        Box(
+        )
+    } else {
+        Scaffold(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .testTag("app_scaffold"),
+            topBar = {
+                if (destination != AppDestination.TECH_DETAIL) {
+                    AppTopBar(
+                        currentLanguage = currentLanguage,
+                        currentTheme = currentTheme,
+                        userAccount = userAccount,
+                        onToggleLanguage = {
+                            viewModel.setLanguage(if (currentLanguage == Language.PT) Language.EN else Language.PT)
+                        },
+                        onToggleTheme = {
+                            val nextTheme = if (currentTheme == ThemePreference.DARK) ThemePreference.LIGHT else ThemePreference.DARK
+                            viewModel.setThemePreference(nextTheme)
+                        },
+                        onOpenLeaderboard = {
+                            viewModel.navigateTo(AppDestination.LEADERBOARD)
+                        },
+                        onOpenAuth = {
+                            if (userAccount?.isLoggedIn == true) {
+                                showAuthDialog = true
+                            } else {
+                                viewModel.navigateTo(AppDestination.LOGIN)
+                            }
+                        }
+                    )
+                }
+            },
+            bottomBar = {
+                AppBottomNav(
+                    currentDestination = destination,
+                    language = currentLanguage,
+                    onNavigate = { dest -> viewModel.navigateTo(dest) }
+                )
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
             when (destination) {
@@ -204,6 +234,11 @@ fun MainAppContainer(
                         sessions = allSessions,
                         routinesWithEvents = allRoutinesWithEvents,
                         selectedDateIso = calendarSelectedDate,
+                        trackerSelectedTech = trackerSelectedTech,
+                        onSelectTrackerTech = { tech -> viewModel.setTrackerSelectedTech(tech) },
+                        todayProgressMap = todayProgressMap,
+                        isLoggedIn = userAccount?.isLoggedIn == true,
+                        onLogQuickSession = { tech, mins, xp -> viewModel.logQuickStudySession(tech, mins, xp) },
                         onSelectDate = { dateIso -> viewModel.setCalendarDate(dateIso) },
                         onToggleSession = { viewModel.toggleSession(it) },
                         onOpenTech = { tech -> viewModel.openTechDetail(tech) },
@@ -238,6 +273,7 @@ fun MainAppContainer(
                         language = currentLanguage,
                         scoreInfo = scoreInfo,
                         badges = allBadges,
+                        todayProgressMap = todayProgressMap,
                         getTechScore = { tech -> viewModel.getTechScore(tech) },
                         onOpenTechDetail = { tech -> viewModel.openTechDetail(tech) }
                     )
@@ -280,7 +316,13 @@ fun MainAppContainer(
                         leaderboardEntries = leaderboardEntries,
                         currentUserAccount = userAccount,
                         language = currentLanguage,
-                        onOpenAuthDialog = { showAuthDialog = true },
+                        onOpenAuthDialog = {
+                            if (userAccount?.isLoggedIn == true) {
+                                showAuthDialog = true
+                            } else {
+                                viewModel.navigateTo(AppDestination.LOGIN)
+                            }
+                        },
                         onSyncLeaderboard = { viewModel.syncScoreToLeaderboard() }
                     )
                 }
@@ -295,9 +337,14 @@ fun MainAppContainer(
                         onSendTestNotification = { viewModel.sendTestReminderNotification() }
                     )
                 }
+
+                AppDestination.LOGIN -> {
+                    // Handled at root level outside the Scaffold
+                }
             }
         }
     }
+}
 
     // Celebration dialog when user earns a new badge
     newlyUnlockedBadge?.let { badge ->
@@ -352,6 +399,7 @@ fun MainAppContainer(
             },
             onSignOut = {
                 viewModel.signOut()
+                showAuthDialog = false
             },
             onDismiss = {
                 showAuthDialog = false

@@ -35,6 +35,10 @@ service cloud.firestore {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data);
       allow delete: if isOwner(userId);
+
+      match /daily_progress/{progressId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Public Dev Scoreboard / Leaderboard

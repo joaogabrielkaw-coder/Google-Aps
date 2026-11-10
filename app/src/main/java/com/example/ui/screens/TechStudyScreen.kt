@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,11 +30,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -561,13 +564,27 @@ fun TechPracticalActivitiesTab(
     onAwardPoints: (String, Int) -> Unit
 ) {
     val isPt = language == Language.PT
-    val allActivities = TechContentRepository.getPracticalActivities(tech)
+    val allActivities = remember(tech) { TechContentRepository.getPracticalActivities(tech) }
     var selectedDifficultyFilter by remember { mutableStateOf<ActivityDifficulty?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
-    val filteredActivities = remember(selectedDifficultyFilter, allActivities) {
-        if (selectedDifficultyFilter == null) allActivities
-        else allActivities.filter { it.difficulty == selectedDifficultyFilter }
+    val filteredActivities = remember(selectedDifficultyFilter, searchQuery, allActivities) {
+        allActivities.filter { activity ->
+            val matchesDiff = selectedDifficultyFilter == null || activity.difficulty == selectedDifficultyFilter
+            val matchesQuery = searchQuery.isBlank() ||
+                activity.titlePt.contains(searchQuery, ignoreCase = true) ||
+                activity.titleEn.contains(searchQuery, ignoreCase = true) ||
+                activity.instructionsPt.contains(searchQuery, ignoreCase = true) ||
+                activity.instructionsEn.contains(searchQuery, ignoreCase = true) ||
+                activity.id.contains(searchQuery, ignoreCase = true)
+            matchesDiff && matchesQuery
+        }
     }
+
+    val completedCount = remember(scoreInfo.completedActivityIds, allActivities) {
+        allActivities.count { scoreInfo.completedActivityIds.contains(it.id) }
+    }
+    val progressFraction = if (allActivities.isNotEmpty()) completedCount.toFloat() / allActivities.size else 0f
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -582,13 +599,13 @@ fun TechPracticalActivitiesTab(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isPt) "Atividades Práticas de Código" else "Hands-on Coding Practice",
+                            text = if (isPt) "Mais de 100 Desafios de Código" else "100+ Coding Challenges",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (isPt) "Dificuldades balanceadas (Iniciante, Intermediário e Avançado). Quanto mais você acerta, mais pontos ganha!"
-                            else "Balanced difficulties (Beginner, Intermediate, Advanced). Earn more XP as you solve correctly!",
+                            text = if (isPt) "${allActivities.size} desafios práticos balanceados em Iniciante, Intermediário e Avançado."
+                            else "${allActivities.size} practical challenges balanced across Beginner, Intermediate, and Advanced.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -597,10 +614,69 @@ fun TechPracticalActivitiesTab(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                // Progress Bar Card
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isPt) "Desafios Concluídos" else "Challenges Solved",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "$completedCount / ${allActivities.size} (${(progressFraction * 100).toInt()}%)",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { progressFraction },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surface
+                        )
+                    }
+                }
+
+                // Search Bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).testTag("input_search_challenges"),
+                    placeholder = {
+                        Text(
+                            text = if (isPt) "Buscar por nome ou tópico (ex: f-string, JOIN, flexbox...)"
+                            else "Search challenge or keyword (e.g. f-string, JOIN, flexbox...)",
+                            fontSize = 12.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotBlank()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
                 // Difficulty Filter Chips
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val isAllSelected = selectedDifficultyFilter == null
                     Surface(
@@ -609,17 +685,18 @@ fun TechPracticalActivitiesTab(
                         modifier = Modifier.clickable { selectedDifficultyFilter = null }
                     ) {
                         Text(
-                            text = if (isPt) "Todas (3)" else "All (3)",
+                            text = if (isPt) "Todas (${allActivities.size})" else "All (${allActivities.size})",
                             color = if (isAllSelected) Color.White else MaterialTheme.colorScheme.onSurface,
                             fontSize = 11.sp,
                             fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                         )
                     }
 
                     ActivityDifficulty.entries.forEach { diff ->
                         val isSelected = selectedDifficultyFilter == diff
                         val diffColor = Color(diff.badgeColorHex)
+                        val countInDiff = allActivities.count { it.difficulty == diff }
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) diffColor else MaterialTheme.colorScheme.surfaceVariant,
@@ -637,8 +714,8 @@ fun TechPracticalActivitiesTab(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isPt) "${diff.labelPt} (+${if (diff == ActivityDifficulty.BEGINNER) 30 else if (diff == ActivityDifficulty.INTERMEDIATE) 60 else 90} XP)"
-                                    else "${diff.labelEn} (+${if (diff == ActivityDifficulty.BEGINNER) 30 else if (diff == ActivityDifficulty.INTERMEDIATE) 60 else 90} XP)",
+                                    text = if (isPt) "${diff.labelPt} ($countInDiff)"
+                                    else "${diff.labelEn} ($countInDiff)",
                                     color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
                                     fontSize = 11.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
@@ -650,10 +727,11 @@ fun TechPracticalActivitiesTab(
             }
         }
 
-        items(filteredActivities) { activity ->
+        itemsIndexed(filteredActivities, key = { _, act -> act.id }) { index, activity ->
             val isCompleted = scoreInfo.completedActivityIds.contains(activity.id)
             PracticalActivityCard(
                 activity = activity,
+                challengeNumber = allActivities.indexOf(activity) + 1,
                 isPt = isPt,
                 isAlreadyCompleted = isCompleted,
                 onCompleteActivity = { pts -> onAwardPoints(activity.id, pts) }
@@ -665,6 +743,7 @@ fun TechPracticalActivitiesTab(
 @Composable
 fun PracticalActivityCard(
     activity: PracticalActivity,
+    challengeNumber: Int = 1,
     isPt: Boolean,
     isAlreadyCompleted: Boolean,
     onCompleteActivity: (Int) -> Unit
@@ -690,13 +769,27 @@ fun PracticalActivityCard(
         border = CardDefaults.outlinedCardBorder().copy(width = 1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header row with difficulty & score badges
+            // Header row with challenge number, difficulty & score badges
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "#$challengeNumber",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))

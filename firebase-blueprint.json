@@ -118,12 +118,61 @@
         }
       },
       "required": ["userId", "displayName", "totalScore"]
+    },
+    "DailyStudyProgress": {
+      "title": "DailyStudyProgress",
+      "description": "Daily study progress tracking per programming language",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User identifier"
+        },
+        "techId": {
+          "type": "string",
+          "description": "Programming language ID"
+        },
+        "techName": {
+          "type": "string",
+          "description": "Programming language display name"
+        },
+        "dateIso": {
+          "type": "string",
+          "description": "Date ISO string (YYYY-MM-DD)"
+        },
+        "completedChallengesCount": {
+          "type": "number",
+          "description": "Count of completed challenges for this language"
+        },
+        "completedQuizCount": {
+          "type": "number",
+          "description": "Count of completed quizzes"
+        },
+        "minutesStudied": {
+          "type": "number",
+          "description": "Total study minutes logged today"
+        },
+        "xpEarned": {
+          "type": "number",
+          "description": "XP earned in this language"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last progress update timestamp"
+        }
+      },
+      "required": ["userId", "techId", "dateIso"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Private user profile documents"
+    },
+    "/users/{userId}/daily_progress/{progressId}": {
+      "schema": { "$ref": "#/entities/DailyStudyProgress" },
+      "description": "Daily study progress per language"
     },
     "/leaderboard/{userId}": {
       "schema": { "$ref": "#/entities/LeaderboardEntry" },

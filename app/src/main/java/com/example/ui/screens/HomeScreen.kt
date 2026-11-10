@@ -72,12 +72,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.RoutineWithEvents
 import com.example.data.local.UserBadgeEntity
+import com.example.data.repository.LanguageDailyProgress
 import com.example.model.Language
 import com.example.model.StudySession
 import com.example.model.Technology
 import com.example.model.UserScoreInfo
 import com.example.ui.AppDestination
 import com.example.ui.UiStreakInfo
+import com.example.ui.components.DailyStudyProgressTrackerCard
 import com.example.ui.components.UserBadgesCompactRow
 import com.example.ui.theme.PurplePrimary
 import com.example.ui.theme.RedAccent
@@ -96,6 +98,11 @@ fun HomeScreen(
     sessions: List<StudySession>,
     routinesWithEvents: List<RoutineWithEvents>,
     selectedDateIso: String,
+    trackerSelectedTech: Technology = Technology.PYTHON,
+    onSelectTrackerTech: (Technology) -> Unit = {},
+    todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
+    isLoggedIn: Boolean = false,
+    onLogQuickSession: (Technology, Int, Int) -> Unit = { _, _, _ -> },
     onSelectDate: (String) -> Unit,
     onToggleSession: (StudySession) -> Unit,
     onOpenTech: (Technology) -> Unit,
@@ -222,6 +229,21 @@ fun HomeScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // 2c. Firestore Daily Study Progress Tracker
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                DailyStudyProgressTrackerCard(
+                    language = language,
+                    selectedTech = trackerSelectedTech,
+                    onSelectTech = onSelectTrackerTech,
+                    todayProgressMap = todayProgressMap,
+                    isLoggedIn = isLoggedIn,
+                    onLogQuickSession = onLogQuickSession,
+                    onOpenTechDetail = onOpenTech
+                )
             }
         }
 

@@ -11,6 +11,8 @@ import com.example.data.local.UserBadgeEntity
 import com.example.data.repository.StudyRepository
 import com.example.data.repository.UserBadgeRepository
 import com.example.data.repository.LeaderboardRepository
+import com.example.data.repository.FirestoreProgressRepository
+import com.example.data.repository.LanguageDailyProgress
 import com.example.model.AiChatMessage
 import com.example.model.AuthMethod
 import com.example.model.Language
@@ -23,6 +25,10 @@ import com.example.model.UserAccount
 import com.example.model.UserScoreInfo
 import com.example.notification.NotificationScheduler
 import com.example.notification.StudyReminderWorker
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
+import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +40,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 enum class AppDestination(val route: String) {
+    LOGIN("login"),
     HOME("home"),
     TECH_HUB("tech_hub"),
     TECH_DETAIL("tech_detail"),
@@ -63,6 +70,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val badgeRepository = UserBadgeRepository(database.userBadgeDao())
     private val aiService = AiStudyService()
     private val leaderboardRepository = LeaderboardRepository(application)
+    private val progressRepository = FirestoreProgressRepository(application)
 
     // User Account & Placar / Leaderboard State
     private val _userAccount = MutableStateFlow<UserAccount?>(null)
@@ -76,8 +84,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private var leaderboardJob: kotlinx.coroutines.Job? = null
 
+    // Daily Study Progress Tracker (Firestore)
+    private val _trackerSelectedTech = MutableStateFlow(Technology.PYTHON)
+    val trackerSelectedTech: StateFlow<Technology> = _trackerSelectedTech.asStateFlow()
+
+    private val _todayLanguageProgressMap = MutableStateFlow<Map<String, LanguageDailyProgress>>(emptyMap())
+    val todayLanguageProgressMap: StateFlow<Map<String, LanguageDailyProgress>> = _todayLanguageProgressMap.asStateFlow()
+
+    private var dailyProgressJob: kotlinx.coroutines.Job? = null
+
+    fun setTrackerSelectedTech(tech: Technology) {
+        _trackerSelectedTech.value = tech
+    }
+
     // Navigation state
-    private val _currentDestination = MutableStateFlow(AppDestination.HOME)
+    private val _currentDestination = MutableStateFlow(
+        if (prefs.getString("auth_user_id", null) != null) {
+            AppDestination.HOME
+        } else {
+            AppDestination.LOGIN
+        }
+    )
     val currentDestination: StateFlow<AppDestination> = _currentDestination.asStateFlow()
 
     private val _selectedTech = MutableStateFlow(Technology.PYTHON)
@@ -218,6 +245,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         _userAccount.value = loadSavedUserAccount()
         restartLeaderboardObservation(_userAccount.value)
+        restartDailyProgressObservation(_userAccount.value)
     }
 
     private fun setupInitialAiGreeting() {
@@ -487,8 +515,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val isPt = _language.value == Language.PT
         _pointsFeedback.value = if (isPt) "+$pointsToAdd XP! Resposta Correta 🎯" else "+$pointsToAdd XP! Correct Answer 🎯"
         triggerBadgeEvaluation()
-        if (_userAccount.value != null) {
+        val user = _userAccount.value
+        if (user != null) {
             syncScoreToLeaderboard()
+            viewModelScope.launch {
+                val techXp = prefs.getInt("score_tech_${tech.id}", 0)
+                val actCount = current.completedActivityIds.count { it.startsWith(tech.id.take(2)) }
+                progressRepository.recordLanguageProgress(
+                    userId = user.userId,
+                    tech = tech,
+                    completedChallenges = actCount,
+                    completedQuizzes = newQuizCount,
+                    xpEarned = techXp
+                )
+            }
         }
     }
 
@@ -522,8 +562,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val isPt = _language.value == Language.PT
         _pointsFeedback.value = if (isPt) "+$pointsToAdd XP! Atividade Concluída 🚀" else "+$pointsToAdd XP! Activity Completed 🚀"
         triggerBadgeEvaluation()
-        if (_userAccount.value != null) {
+        val user = _userAccount.value
+        if (user != null) {
             syncScoreToLeaderboard()
+            viewModelScope.launch {
+                val techXp = prefs.getInt("score_tech_${tech.id}", 0)
+                val actCount = newActIds.count { it.startsWith(tech.id.take(2)) }
+                progressRepository.recordLanguageProgress(
+                    userId = user.userId,
+                    tech = tech,
+                    completedChallenges = actCount,
+                    completedQuizzes = current.correctQuizCount,
+                    xpEarned = techXp
+                )
+            }
         }
     }
 
@@ -606,32 +658,88 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun restartDailyProgressObservation(account: UserAccount?) {
+        dailyProgressJob?.cancel()
+        val uid = account?.userId ?: ""
+        dailyProgressJob = viewModelScope.launch {
+            progressRepository.observeAllLanguagesTodayProgress(uid).collect { map ->
+                _todayLanguageProgressMap.value = map
+            }
+        }
+    }
+
+    fun logQuickStudySession(tech: Technology, minutes: Int, xp: Int) {
+        viewModelScope.launch {
+            val uid = _userAccount.value?.userId ?: ""
+            val success = progressRepository.logQuickStudySession(uid, tech, minutes, xp)
+            if (success) {
+                val current = _scoreInfo.value
+                val newScore = current.totalScore + xp
+                val techKey = "score_tech_${tech.id}"
+                val currentTechScore = prefs.getInt(techKey, 0)
+                prefs.edit()
+                    .putInt("user_total_score", newScore)
+                    .putInt(techKey, currentTechScore + xp)
+                    .apply()
+
+                _scoreInfo.value = calculateScoreInfo(
+                    score = newScore,
+                    quizCount = current.correctQuizCount,
+                    actCount = current.completedActivitiesCount,
+                    actIds = current.completedActivityIds,
+                    quizIds = current.completedQuizIds
+                )
+
+                triggerBadgeEvaluation()
+                val isPt = _language.value == Language.PT
+                _pointsFeedback.value = if (isPt) "⏱️ +$minutes min e +$xp XP registrados em ${tech.displayName} no Firestore!"
+                else "⏱️ +$minutes min and +$xp XP logged for ${tech.displayName} in Firestore!"
+
+                if (_userAccount.value != null) {
+                    syncScoreToLeaderboard()
+                }
+            }
+        }
+    }
+
     fun loginWithGoogle(
         idToken: String,
         displayName: String?,
         email: String?,
         photoUrl: String?,
-        extraPhone: String = ""
+        extraPhone: String = "",
+        onSuccess: () -> Unit = {}
     ) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             try {
+                // Firebase Authentication sign-in with Google credential
+                var firebaseUid: String? = null
+                try {
+                    val authCredential = GoogleAuthProvider.getCredential(idToken, null)
+                    val authResult = Firebase.auth.signInWithCredential(authCredential).await()
+                    firebaseUid = authResult.user?.uid
+                } catch (authEx: Exception) {
+                    android.util.Log.w("MainViewModel", "Firebase signInWithCredential: ${authEx.message}")
+                }
+
                 val score = _scoreInfo.value
                 val streak = streakInfo.value.streakDays
                 val badges = unlockedBadgesCount.value
                 val resolvedName = displayName?.takeIf { it.isNotBlank() }
+                    ?: Firebase.auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
                     ?: email?.substringBefore("@")
                     ?: "Dev Google"
 
-                // Construct unique user id
-                val uid = "g_" + (email ?: "user").replace(Regex("[^a-zA-Z0-9]"), "_")
+                // Construct unique user id preferring the Firebase Auth UID
+                val uid = firebaseUid ?: Firebase.auth.currentUser?.uid ?: ("g_" + (email ?: "user").replace(Regex("[^a-zA-Z0-9]"), "_"))
 
                 val account = UserAccount(
                     userId = uid,
                     displayName = resolvedName,
-                    email = email ?: "",
-                    phoneNumber = extraPhone,
-                    photoUrl = photoUrl ?: "",
+                    email = email ?: Firebase.auth.currentUser?.email ?: "",
+                    phoneNumber = extraPhone.ifBlank { Firebase.auth.currentUser?.phoneNumber ?: "" },
+                    photoUrl = photoUrl ?: Firebase.auth.currentUser?.photoUrl?.toString() ?: "",
                     authMethod = AuthMethod.GOOGLE,
                     totalScore = score.totalScore,
                     levelNumber = score.levelNumber,
@@ -648,10 +756,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Sync to Firestore Leaderboard
                 leaderboardRepository.syncUserToLeaderboard(account)
                 restartLeaderboardObservation(account)
+                restartDailyProgressObservation(account)
 
                 val isPt = _language.value == Language.PT
-                _pointsFeedback.value = if (isPt) "🎉 Bem-vindo, $resolvedName! Conectado com Google e salvo no Placar."
-                else "🎉 Welcome, $resolvedName! Connected with Google and saved to Leaderboard."
+                _pointsFeedback.value = if (isPt) "🎉 Bem-vindo, $resolvedName! Autenticado com Firebase e salvo no Placar."
+                else "🎉 Welcome, $resolvedName! Authenticated with Firebase and saved to Leaderboard."
+
+                // Route to main dashboard
+                _currentDestination.value = AppDestination.HOME
+                onSuccess()
             } catch (e: Exception) {
                 val isPt = _language.value == Language.PT
                 _pointsFeedback.value = if (isPt) "Erro ao entrar: ${e.message}" else "Sign-in error: ${e.message}"
@@ -661,7 +774,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loginWithPhoneNumber(name: String, phoneNumber: String) {
+    fun loginWithPhoneNumber(name: String, phoneNumber: String, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             _isAuthLoading.value = true
             try {
@@ -690,10 +803,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 leaderboardRepository.syncUserToLeaderboard(account)
                 restartLeaderboardObservation(account)
+                restartDailyProgressObservation(account)
 
                 val isPt = _language.value == Language.PT
                 _pointsFeedback.value = if (isPt) "🎉 Olá, $name! Telefone registrado e pontuação salva no Placar."
                 else "🎉 Hello, $name! Phone registered and score saved to Leaderboard."
+
+                // Route to main dashboard
+                _currentDestination.value = AppDestination.HOME
+                onSuccess()
             } catch (e: Exception) {
                 val isPt = _language.value == Language.PT
                 _pointsFeedback.value = if (isPt) "Erro ao registrar telefone: ${e.message}" else "Phone sign-in error: ${e.message}"
@@ -732,11 +850,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun signOut() {
+        try {
+            Firebase.auth.signOut()
+        } catch (e: Exception) {
+            // ignore
+        }
         _userAccount.value = null
         saveUserAccountToPrefs(null)
         restartLeaderboardObservation(null)
+        restartDailyProgressObservation(null)
         val isPt = _language.value == Language.PT
         _pointsFeedback.value = if (isPt) "Sessão encerrada com sucesso." else "Signed out successfully."
+        _currentDestination.value = AppDestination.LOGIN
     }
 
     fun clearScoreData() {

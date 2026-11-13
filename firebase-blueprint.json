@@ -53,6 +53,10 @@
           "type": "number",
           "description": "Total unlocked badges count"
         },
+        "themeConfig": {
+          "type": "object",
+          "description": "User's customized color palette and theme mode preferences"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

@@ -40,6 +40,8 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -72,13 +75,78 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.local.UserBadgeEntity
+import com.example.data.repository.LanguageDailyProgress
 import com.example.model.Language
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.PurplePrimaryLight
-import com.example.ui.theme.RedAccent
+import com.example.model.Technology
+import com.example.ui.theme.LocalDevRoutineColors
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val PurplePrimaryLight: Color
+    @Composable get() = LocalDevRoutineColors.current.primaryLight
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
+
+enum class DailySealTier(
+    val key: String,
+    val target: Int,
+    val xpReward: Int,
+    val labelPt: String,
+    val labelEn: String,
+    val lightColor: Color,
+    val mainColor: Color,
+    val darkColor: Color
+) {
+    BRONZE(
+        key = "bronze",
+        target = 3,
+        xpReward = 60,
+        labelPt = "Bronze",
+        labelEn = "Bronze",
+        lightColor = Color(0xFFE6A566),
+        mainColor = Color(0xFFCD7F32),
+        darkColor = Color(0xFF7D4312)
+    ),
+    SILVER(
+        key = "silver",
+        target = 5,
+        xpReward = 120,
+        labelPt = "Prata",
+        labelEn = "Silver",
+        lightColor = Color(0xFFF3F6FA),
+        mainColor = Color(0xFFB8C2CE),
+        darkColor = Color(0xFF64748B)
+    ),
+    GOLD(
+        key = "gold",
+        target = 10,
+        xpReward = 250,
+        labelPt = "Ouro",
+        labelEn = "Gold",
+        lightColor = Color(0xFFFFF3B0),
+        mainColor = Color(0xFFFFD700),
+        darkColor = Color(0xFFB45309)
+    );
+
+    fun metallicBrush(): Brush = Brush.linearGradient(listOf(lightColor, mainColor, darkColor))
+}
+
+fun parseDailySealKey(iconKey: String): Pair<Technology, DailySealTier>? {
+    if (!iconKey.startsWith("daily_")) return null
+    val suffix = iconKey.removePrefix("daily_")
+    val lastUnderscore = suffix.lastIndexOf('_')
+    if (lastUnderscore <= 0) return null
+    val techId = suffix.substring(0, lastUnderscore)
+    val tierKey = suffix.substring(lastUnderscore + 1)
+    val tech = Technology.fromId(techId) ?: return null
+    val tier = DailySealTier.entries.firstOrNull { it.key == tierKey } ?: return null
+    return tech to tier
+}
 
 /**
  * Seção completa de Emblemas e Conquistas (Room Database)
@@ -89,15 +157,18 @@ fun UserBadgesSection(
     badges: List<UserBadgeEntity>,
     language: Language,
     modifier: Modifier = Modifier,
+    todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
+    onOpenTech: ((Technology) -> Unit)? = null,
     onBadgeClick: ((UserBadgeEntity) -> Unit)? = null
 ) {
     val isPt = language == Language.PT
     var selectedCategory by remember { mutableStateOf<String?>(null) } // null = Todos
     var selectedBadgeForDetail by remember { mutableStateOf<UserBadgeEntity?>(null) }
 
-    val categories = remember(badges) {
+    val categories = remember(badges, isPt) {
         listOf(
             null to (if (isPt) "Todos" else "All"),
+            "DAILY_TECH" to (if (isPt) "Selos Diários" else "Daily Seals"),
             "STREAK" to (if (isPt) "Sequências" else "Streaks"),
             "TECH" to (if (isPt) "Tecnologias" else "Tech"),
             "ACTIVITY" to (if (isPt) "Atividades" else "Activities"),
@@ -106,9 +177,16 @@ fun UserBadgesSection(
         )
     }
 
+    val dailyBadges = remember(badges) {
+        badges.filter { it.category.equals("DAILY_TECH", ignoreCase = true) }
+    }
+    val unlockedDailyCount = dailyBadges.count { it.isUnlocked }
+
     val filteredBadges = remember(badges, selectedCategory) {
-        if (selectedCategory == null) badges
-        else badges.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        when (selectedCategory) {
+            null -> badges.filter { !it.category.equals("DAILY_TECH", ignoreCase = true) || it.isUnlocked }
+            else -> badges.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        }
     }
 
     val unlockedCount = badges.count { it.isUnlocked }
@@ -251,23 +329,96 @@ fun UserBadgesSection(
             }
         }
 
-        // Badges Grid / Cards
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            maxItemsInEachRow = 2
-        ) {
-            filteredBadges.forEach { badge ->
-                BadgeCard(
-                    badge = badge,
-                    language = language,
-                    onClick = {
-                        selectedBadgeForDetail = badge
-                        onBadgeClick?.invoke(badge)
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+        // Quick highlight card when viewing "All" so Daily Language Seals are immediately discoverable
+        if (selectedCategory == null && dailyBadges.isNotEmpty()) {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, DailySealTier.GOLD.mainColor.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { selectedCategory = "DAILY_TECH" }
+                    .testTag("card_daily_seals_summary")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(DailySealTier.GOLD.metallicBrush()),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WorkspacePremium,
+                                contentDescription = null,
+                                tint = Color(0xFF3E2723),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = if (isPt) "Selos Diários por Linguagem" else "Daily Language Seals",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = if (isPt) "$unlockedDailyCount de ${dailyBadges.size} selos conquistados (3, 5 ou 10 desafios/dia)"
+                                else "$unlockedDailyCount of ${dailyBadges.size} seals earned (3, 5, or 10 challenges/day)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = if (isPt) "Ver selos diários" else "View daily seals",
+                        tint = DailySealTier.GOLD.mainColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        // Badges Grid / Language Grouped Daily Seals Showcase
+        if (selectedCategory == "DAILY_TECH") {
+            LanguageDailySealsShowcase(
+                badges = dailyBadges,
+                language = language,
+                todayProgressMap = todayProgressMap,
+                onBadgeClick = { badge ->
+                    selectedBadgeForDetail = badge
+                    onBadgeClick?.invoke(badge)
+                },
+                onOpenTech = onOpenTech
+            )
+        } else {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                maxItemsInEachRow = 2
+            ) {
+                filteredBadges.forEach { badge ->
+                    BadgeCard(
+                        badge = badge,
+                        language = language,
+                        onClick = {
+                            selectedBadgeForDetail = badge
+                            onBadgeClick?.invoke(badge)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
@@ -279,6 +430,248 @@ fun UserBadgesSection(
             language = language,
             onDismiss = { selectedBadgeForDetail = null }
         )
+    }
+}
+
+/**
+ * Vitrine dedicada aos Selos Diários agrupados pelas 12 linguagens/tecnologias
+ * com medalhas metálicas Bronze (3), Prata (5) e Ouro (10).
+ */
+@Composable
+fun LanguageDailySealsShowcase(
+    badges: List<UserBadgeEntity>,
+    language: Language,
+    todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
+    onBadgeClick: (UserBadgeEntity) -> Unit,
+    onOpenTech: ((Technology) -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val badgeById = remember(badges) { badges.associateBy { it.id } }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("language_daily_seals_showcase"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Legend / Explanation Banner
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DailySealTier.entries.forEach { tier ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .clip(CircleShape)
+                                .background(tier.metallicBrush())
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isPt) "${tier.labelPt}: ${tier.target}/dia" else "${tier.labelEn}: ${tier.target}/day",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Technology.entries.forEach { tech ->
+            val bronzeBadge = badgeById["badge_daily_${tech.id}_bronze"]
+            val silverBadge = badgeById["badge_daily_${tech.id}_silver"]
+            val goldBadge = badgeById["badge_daily_${tech.id}_gold"]
+            val tierBadges = listOfNotNull(
+                bronzeBadge?.let { DailySealTier.BRONZE to it },
+                silverBadge?.let { DailySealTier.SILVER to it },
+                goldBadge?.let { DailySealTier.GOLD to it }
+            )
+            val todayCount = todayProgressMap[tech.id]?.completedChallengesCount
+                ?: tierBadges.maxOfOrNull { (_, b) -> if (!b.isUnlocked) b.currentProgress else 0 }
+                ?: 0
+            val unlockedInTech = tierBadges.count { (_, b) -> b.isUnlocked }
+
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(
+                    width = if (unlockedInTech > 0) 1.5.dp else 1.dp,
+                    color = if (unlockedInTech > 0) tech.accentColor.copy(alpha = 0.65f)
+                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("daily_seal_tech_card_${tech.id}")
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(tech.accentColor.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = tech.icon,
+                                    contentDescription = tech.displayName,
+                                    tint = tech.accentColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = tech.displayName,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = if (isPt) "$todayCount desafios hoje • $unlockedInTech/3 selos"
+                                    else "$todayCount solved today • $unlockedInTech/3 seals",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (onOpenTech != null) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = tech.accentColor.copy(alpha = 0.16f),
+                                modifier = Modifier
+                                    .clickable { onOpenTech(tech) }
+                                    .testTag("btn_practice_seal_${tech.id}")
+                            ) {
+                                Text(
+                                    text = if (isPt) "Praticar" else "Practice",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = tech.accentColor,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        tierBadges.forEach { (tier, badge) ->
+                            DailySealMedallionTile(
+                                tech = tech,
+                                tier = tier,
+                                badge = badge,
+                                todayCount = todayCount,
+                                language = language,
+                                onClick = { onBadgeClick(badge) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DailySealMedallionTile(
+    tech: Technology,
+    tier: DailySealTier,
+    badge: UserBadgeEntity,
+    todayCount: Int,
+    language: Language,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val isUnlocked = badge.isUnlocked
+    val progressRatio = if (isUnlocked) 1f else (todayCount.toFloat() / tier.target.toFloat()).coerceIn(0f, 1f)
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isUnlocked) tier.mainColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = if (isUnlocked) 1.5.dp else 1.dp,
+            color = if (isUnlocked) tier.mainColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        ),
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .testTag("seal_tile_${tech.id}_${tier.key}")
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isUnlocked) tier.metallicBrush()
+                        else SolidColor(Color.Gray.copy(alpha = 0.22f))
+                    )
+                    .border(
+                        width = if (isUnlocked) 2.dp else 1.dp,
+                        color = if (isUnlocked) tier.lightColor else Color.Gray.copy(alpha = 0.4f),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (isUnlocked) tech.icon else Icons.Default.Lock,
+                    contentDescription = badge.title(language),
+                    tint = if (isUnlocked) Color(0xFF1F160E) else Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (isPt) tier.labelPt else tier.labelEn,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isUnlocked) tier.mainColor else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = if (isUnlocked) "✓ +${tier.xpReward} XP"
+                else "${todayCount.coerceAtMost(tier.target)}/${tier.target} ${if (isPt) "hoje" else "today"}",
+                fontSize = 10.sp,
+                fontWeight = if (isUnlocked) FontWeight.Bold else FontWeight.Medium,
+                color = if (isUnlocked) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(5.dp))
+            LinearProgressIndicator(
+                progress = { progressRatio },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(CircleShape),
+                color = if (isUnlocked) tier.mainColor else tech.accentColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        }
     }
 }
 
@@ -295,6 +688,13 @@ fun BadgeCard(
     val isPt = language == Language.PT
     val isUnlocked = badge.isUnlocked
     val icon = getBadgeIcon(badge.iconKey)
+    val dailySealInfo = remember(badge.iconKey) { parseDailySealKey(badge.iconKey) }
+    val themePrimary = PurplePrimary
+    val themeAccent = RedAccent
+    val activeBrush = remember(dailySealInfo, isUnlocked, themePrimary, themeAccent) {
+        if (!isUnlocked) null
+        else dailySealInfo?.second?.metallicBrush() ?: Brush.linearGradient(listOf(themePrimary, themeAccent))
+    }
 
     Card(
         modifier = modifier
@@ -310,11 +710,7 @@ fun BadgeCard(
             }
         ),
         border = CardDefaults.outlinedCardBorder().copy(
-            brush = if (isUnlocked) {
-                Brush.linearGradient(listOf(PurplePrimary, RedAccent))
-            } else {
-                androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            },
+            brush = activeBrush ?: SolidColor(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             width = if (isUnlocked) 1.5.dp else 1.dp
         )
     ) {
@@ -335,18 +731,16 @@ fun BadgeCard(
                         .size(46.dp)
                         .clip(CircleShape)
                         .background(
-                            if (isUnlocked) {
-                                Brush.linearGradient(listOf(PurplePrimary, RedAccent))
-                            } else {
-                                androidx.compose.ui.graphics.SolidColor(Color.DarkGray.copy(alpha = 0.4f))
-                            }
+                            activeBrush ?: SolidColor(Color.DarkGray.copy(alpha = 0.4f))
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isUnlocked) icon else Icons.Default.Lock,
                         contentDescription = null,
-                        tint = if (isUnlocked) Color.White else Color.Gray,
+                        tint = if (isUnlocked) {
+                            if (dailySealInfo != null) Color(0xFF1F160E) else Color.White
+                        } else Color.Gray,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -562,13 +956,16 @@ fun CompactBadgeChip(
 ) {
     val isUnlocked = badge.isUnlocked
     val icon = getBadgeIcon(badge.iconKey)
+    val dailySealInfo = remember(badge.iconKey) { parseDailySealKey(badge.iconKey) }
+    val activeColor = dailySealInfo?.second?.mainColor ?: PurplePrimary
+    val activeBrush = dailySealInfo?.second?.metallicBrush() ?: Brush.linearGradient(listOf(PurplePrimary, RedAccent))
 
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = if (isUnlocked) PurplePrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(
+        color = if (isUnlocked) activeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
             width = 1.dp,
-            color = if (isUnlocked) PurplePrimary else Color.Transparent
+            color = if (isUnlocked) activeColor else Color.Transparent
         ),
         modifier = Modifier
             .clickable(onClick = onClick)
@@ -583,15 +980,17 @@ fun CompactBadgeChip(
                     .size(24.dp)
                     .clip(CircleShape)
                     .background(
-                        if (isUnlocked) Brush.linearGradient(listOf(PurplePrimary, RedAccent))
-                        else androidx.compose.ui.graphics.SolidColor(Color.Gray.copy(alpha = 0.3f))
+                        if (isUnlocked) activeBrush
+                        else SolidColor(Color.Gray.copy(alpha = 0.3f))
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = if (isUnlocked) icon else Icons.Default.Lock,
                     contentDescription = null,
-                    tint = if (isUnlocked) Color.White else Color.Gray,
+                    tint = if (isUnlocked) {
+                        if (dailySealInfo != null) Color(0xFF1F160E) else Color.White
+                    } else Color.Gray,
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -625,6 +1024,8 @@ fun BadgeDetailDialog(
     val isPt = language == Language.PT
     val isUnlocked = badge.isUnlocked
     val icon = getBadgeIcon(badge.iconKey)
+    val dailySealInfo = remember(badge.iconKey) { parseDailySealKey(badge.iconKey) }
+    val medalBrush = dailySealInfo?.second?.metallicBrush() ?: Brush.linearGradient(listOf(PurplePrimary, RedAccent))
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -646,7 +1047,7 @@ fun BadgeDetailDialog(
                 ) {
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -655,16 +1056,15 @@ fun BadgeDetailDialog(
                 // Large Glowing Icon
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(84.dp)
                         .clip(CircleShape)
                         .background(
-                            if (isUnlocked) Brush.linearGradient(listOf(PurplePrimary, RedAccent))
-                            else androidx.compose.ui.graphics.SolidColor(Color.DarkGray.copy(alpha = 0.4f))
+                            if (isUnlocked) medalBrush
+                            else SolidColor(Color.DarkGray.copy(alpha = 0.4f))
                         )
                         .border(
-                            width = 2.dp,
-                            brush = if (isUnlocked) Brush.linearGradient(listOf(RedAccent, PurplePrimary))
-                            else androidx.compose.ui.graphics.SolidColor(Color.Transparent),
+                            width = 2.5.dp,
+                            brush = if (isUnlocked) medalBrush else SolidColor(Color.Transparent),
                             shape = CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -672,7 +1072,9 @@ fun BadgeDetailDialog(
                     Icon(
                         imageVector = if (isUnlocked) icon else Icons.Default.Lock,
                         contentDescription = null,
-                        tint = if (isUnlocked) Color.White else Color.Gray,
+                        tint = if (isUnlocked) {
+                            if (dailySealInfo != null) Color(0xFF1F160E) else Color.White
+                        } else Color.Gray,
                         modifier = Modifier.size(42.dp)
                     )
                 }
@@ -685,7 +1087,25 @@ fun BadgeDetailDialog(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                if (dailySealInfo != null) {
+                    val (sealTech, sealTier) = dailySealInfo
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = sealTech.accentColor.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (isPt) "${sealTech.displayName} • ${sealTier.labelPt} (${sealTier.target} desafios/dia)"
+                            else "${sealTech.displayName} • ${sealTier.labelEn} (${sealTier.target} challenges/day)",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = sealTech.accentColor,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Surface(
                     color = if (isUnlocked) Color(0xFF2E7D32).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
@@ -693,7 +1113,7 @@ fun BadgeDetailDialog(
                 ) {
                     Text(
                         text = if (isUnlocked) {
-                            if (isPt) "✓ Emblema Conquistado" else "✓ Badge Earned"
+                            if (isPt) "✓ Selo/Emblema Conquistado" else "✓ Seal/Badge Earned"
                         } else {
                             if (isPt) "🔒 Em Bloqueio" else "🔒 Locked Milestone"
                         },
@@ -727,7 +1147,7 @@ fun BadgeDetailDialog(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = if (isPt) "Meta do Emblema" else "Badge Target",
+                                text = if (isPt) "Meta Diária / Marco" else "Daily Target / Milestone",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -745,7 +1165,7 @@ fun BadgeDetailDialog(
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(CircleShape),
-                            color = if (isUnlocked) Color(0xFF4CAF50) else PurplePrimary,
+                            color = if (isUnlocked) Color(0xFF4CAF50) else (dailySealInfo?.second?.mainColor ?: PurplePrimary),
                             trackColor = MaterialTheme.colorScheme.surface
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -790,6 +1210,9 @@ fun BadgeDetailDialog(
  * Retorna o ícone Material mais expressivo para a chave informada
  */
 fun getBadgeIcon(iconKey: String): ImageVector {
+    parseDailySealKey(iconKey)?.let { (tech, _) ->
+        return tech.icon
+    }
     return when (iconKey.lowercase()) {
         "python" -> Icons.Default.Terminal
         "night_owl" -> Icons.Default.DarkMode

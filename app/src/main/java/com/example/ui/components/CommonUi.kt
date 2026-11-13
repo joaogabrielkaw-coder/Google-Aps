@@ -58,8 +58,7 @@ import com.example.model.Language
 import com.example.model.ThemePreference
 import com.example.model.UserAccount
 import com.example.ui.AppDestination
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,11 +66,17 @@ fun AppTopBar(
     currentLanguage: Language,
     currentTheme: ThemePreference,
     userAccount: UserAccount? = null,
-    onToggleLanguage: () -> Unit,
-    onToggleTheme: () -> Unit,
+    dailyLives: com.example.ui.DailyLivesInfo = com.example.ui.DailyLivesInfo(),
+    isSettingsSelected: Boolean = false,
+    onOpenLivesInfo: () -> Unit = {},
+    onToggleLanguage: () -> Unit = {},
+    onToggleTheme: () -> Unit = {},
     onOpenLeaderboard: () -> Unit = {},
-    onOpenAuth: () -> Unit = {}
+    onOpenAuth: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
+    val brand = LocalDevRoutineColors.current
+    val isPt = currentLanguage == Language.PT
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -81,7 +86,7 @@ fun AppTopBar(
                         .clip(RoundedCornerShape(8.dp))
                         .background(
                             Brush.linearGradient(
-                                listOf(PurplePrimary, RedAccent)
+                                listOf(brand.primary, brand.accent)
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -99,20 +104,28 @@ fun AppTopBar(
                         text = "DevRoutine AI",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
+                            fontSize = 17.sp
+                        ),
+                        maxLines = 1
                     )
                     Text(
-                        text = if (currentLanguage == Language.PT) "Python • SQL • Java & DBs" else "Python • SQL • Java & DBs",
+                        text = "Python • SQL • Java & DBs",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        ),
+                        maxLines = 1
                     )
                 }
             }
         },
         actions = {
+            // Vidas Diárias (25/25)
+            DailyLivesPill(
+                livesInfo = dailyLives,
+                onClick = onOpenLivesInfo
+            )
+
             // Placar / Leaderboard button
             IconButton(
                 onClick = onOpenLeaderboard,
@@ -120,8 +133,8 @@ fun AppTopBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.EmojiEvents,
-                    contentDescription = "Placar de Desenvolvedores",
-                    tint = PurplePrimary
+                    contentDescription = if (isPt) "Placar de Desenvolvedores" else "Developer Leaderboard",
+                    tint = brand.primary
                 )
             }
 
@@ -131,62 +144,50 @@ fun AppTopBar(
                 modifier = Modifier.testTag("button_top_auth")
             ) {
                 if (userAccount != null && userAccount.isLoggedIn) {
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = userAccount.displayName.take(1).uppercase(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    }
+                    UserAvatar(
+                        photoUrl = userAccount.photoUrl,
+                        displayName = userAccount.displayName,
+                        size = 30.dp,
+                        borderWidth = 1.5.dp,
+                        borderColor = brand.primaryLight
+                    )
                 } else {
                     Icon(
                         imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Entrar / Perfil",
-                        tint = RedAccent
+                        contentDescription = if (isPt) "Entrar / Perfil" else "Sign in / Profile",
+                        tint = brand.accent
                     )
                 }
             }
 
-            // Language switcher button
+            // Engrenagem de Configurações bem no canto direito
             IconButton(
-                onClick = onToggleLanguage,
-                modifier = Modifier.testTag("button_toggle_language")
+                onClick = onOpenSettings,
+                modifier = Modifier.testTag("button_top_settings")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSettingsSelected) brand.primary.copy(alpha = 0.22f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+                        )
+                        .border(
+                            width = if (isSettingsSelected) 1.5.dp else 1.dp,
+                            color = if (isSettingsSelected) brand.primary
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(text = currentLanguage.flag, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = currentLanguage.code.uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = if (isPt) "Configurações" else "Settings",
+                        tint = if (isSettingsSelected) brand.primary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
-            }
-
-            // Theme toggle button
-            IconButton(
-                onClick = onToggleTheme,
-                modifier = Modifier.testTag("button_toggle_theme")
-            ) {
-                Icon(
-                    imageVector = if (currentTheme == ThemePreference.DARK) Icons.Default.DarkMode else Icons.Default.LightMode,
-                    contentDescription = "Alternar Modo Escuro/Claro",
-                    tint = if (currentTheme == ThemePreference.DARK) PurplePrimary else RedAccent
-                )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -203,6 +204,7 @@ fun AppBottomNav(
     onNavigate: (AppDestination) -> Unit
 ) {
     val isPt = language == Language.PT
+    val brand = LocalDevRoutineColors.current
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
@@ -214,7 +216,7 @@ fun AppBottomNav(
             label = { Text(if (isPt) "Início" else "Home", fontSize = 11.sp) },
             modifier = Modifier.testTag("nav_home"),
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Color.White,
+                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
                 selectedTextColor = MaterialTheme.colorScheme.primary,
                 indicatorColor = MaterialTheme.colorScheme.primary
             )
@@ -226,7 +228,7 @@ fun AppBottomNav(
             label = { Text(if (isPt) "Cursos" else "Techs", fontSize = 11.sp) },
             modifier = Modifier.testTag("nav_techs"),
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Color.White,
+                selectedIconColor = MaterialTheme.colorScheme.onPrimary,
                 selectedTextColor = MaterialTheme.colorScheme.primary,
                 indicatorColor = MaterialTheme.colorScheme.primary
             )
@@ -239,8 +241,8 @@ fun AppBottomNav(
             modifier = Modifier.testTag("nav_progress"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Color.White,
-                selectedTextColor = RedAccent,
-                indicatorColor = RedAccent
+                selectedTextColor = brand.accent,
+                indicatorColor = brand.accent
             )
         )
         NavigationBarItem(
@@ -250,7 +252,7 @@ fun AppBottomNav(
             label = { Text(if (isPt) "Calendário" else "Calendar", fontSize = 11.sp) },
             modifier = Modifier.testTag("nav_calendar"),
             colors = NavigationBarItemDefaults.colors(
-                selectedIconColor = Color.White,
+                selectedIconColor = MaterialTheme.colorScheme.onSecondary,
                 selectedTextColor = MaterialTheme.colorScheme.secondary,
                 indicatorColor = MaterialTheme.colorScheme.secondary
             )
@@ -263,8 +265,8 @@ fun AppBottomNav(
             modifier = Modifier.testTag("nav_ai"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Color.White,
-                selectedTextColor = PurplePrimary,
-                indicatorColor = PurplePrimary
+                selectedTextColor = brand.primary,
+                indicatorColor = brand.primary
             )
         )
     }

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.EmojiEvents
+import com.example.ui.components.UserAvatar
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Login
 import androidx.compose.material.icons.filled.MilitaryTech
@@ -55,9 +56,16 @@ import androidx.compose.ui.unit.sp
 import com.example.model.Language
 import com.example.model.LeaderboardEntry
 import com.example.model.UserAccount
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.PurplePrimaryLight
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val PurplePrimaryLight: Color
+    @Composable get() = LocalDevRoutineColors.current.primaryLight
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 @Composable
 fun LeaderboardScreen(
@@ -123,26 +131,19 @@ fun LeaderboardScreen(
                         }
                     }
 
-                    // Top Action: Login or Sync
+                    // Top Action: Login or Profile Avatar
                     if (currentUserAccount?.isLoggedIn == true) {
                         IconButton(
                             onClick = onOpenAuthDialog,
                             modifier = Modifier.testTag("btn_top_profile_leaderboard")
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(PurplePrimary),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = currentUserAccount.displayName.take(1).uppercase(),
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                            }
+                            UserAvatar(
+                                photoUrl = currentUserAccount.photoUrl,
+                                displayName = currentUserAccount.displayName,
+                                size = 34.dp,
+                                borderWidth = 1.5.dp,
+                                borderColor = PurplePrimaryLight
+                            )
                         }
                     } else {
                         Button(
@@ -310,24 +311,13 @@ fun PodiumColumn(
         Spacer(modifier = Modifier.height(6.dp))
 
         // Avatar
-        Box(
-            modifier = Modifier
-                .size(if (place == 1) 54.dp else 46.dp)
-                .clip(CircleShape)
-                .background(
-                    if (place == 1) Brush.linearGradient(listOf(PurplePrimary, RedAccent))
-                    else Brush.linearGradient(listOf(PurplePrimary.copy(alpha = 0.6f), haloColor))
-                )
-                .border(2.dp, haloColor, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = entry.displayName.take(2).uppercase(),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = if (place == 1) 16.sp else 13.sp
-            )
-        }
+        UserAvatar(
+            photoUrl = entry.photoUrl,
+            displayName = entry.displayName,
+            size = if (place == 1) 54.dp else 46.dp,
+            borderWidth = 2.dp,
+            borderColor = haloColor
+        )
 
         Spacer(modifier = Modifier.height(6.dp))
 
@@ -411,20 +401,13 @@ fun CurrentUserRankingCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = user.displayName.take(2).uppercase(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
-                    }
+                    UserAvatar(
+                        photoUrl = user.photoUrl,
+                        displayName = user.displayName,
+                        size = 42.dp,
+                        borderWidth = 2.dp,
+                        borderColor = PurplePrimaryLight
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -547,23 +530,13 @@ fun LeaderboardEntryRow(
                 )
 
                 // Avatar
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (entry.isCurrentUser) Brush.linearGradient(listOf(PurplePrimary, RedAccent))
-                            else androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = entry.displayName.take(2).uppercase(),
-                        fontWeight = FontWeight.Bold,
-                        color = if (entry.isCurrentUser) Color.White else MaterialTheme.colorScheme.primary,
-                        fontSize = 12.sp
-                    )
-                }
+                UserAvatar(
+                    photoUrl = entry.photoUrl,
+                    displayName = entry.displayName,
+                    size = 38.dp,
+                    borderWidth = if (entry.isCurrentUser) 2.dp else 1.dp,
+                    borderColor = if (entry.isCurrentUser) PurplePrimaryLight else MaterialTheme.colorScheme.outlineVariant
+                )
 
                 Spacer(modifier = Modifier.width(10.dp))
 

@@ -168,6 +168,14 @@ object NotificationScheduler {
         }
     }
 
+    fun cancelDailyStudyCheck(context: Context) {
+        try {
+            WorkManager.getInstance(context).cancelUniqueWork("daily_study_routine_check")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to cancel daily check", e)
+        }
+    }
+
     /**
      * Dispara notificação imediata de teste para o usuário confirmar o funcionamento.
      */

@@ -63,11 +63,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AiChatMessage
+import com.example.model.AudioTranscriptionUiState
 import com.example.model.Language
 import com.example.model.RoutinePlan
 import com.example.model.Technology
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.RedAccent
+import com.example.ui.components.VoiceRecorderIconButton
+import com.example.ui.components.VoiceTranscriptionStatusBanner
+import com.example.ui.theme.LocalDevRoutineColors
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 @Composable
 fun AiChatScreen(
@@ -76,6 +84,10 @@ fun AiChatScreen(
     isLoading: Boolean,
     streamingText: String,
     errorMessage: String?,
+    transcriptionState: AudioTranscriptionUiState = AudioTranscriptionUiState.Idle,
+    onRecordingStateChanged: (Boolean) -> Unit = {},
+    onAudioCaptured: (bytes: ByteArray, mimeType: String, durationSeconds: Int) -> Unit = { _, _, _ -> },
+    onClearTranscriptionState: () -> Unit = {},
     onSendMessage: (String) -> Unit,
     onGenerateRoutine: (goal: String, techs: List<Technology>, days: Int, minutes: Int) -> Unit,
     onSaveRoutineToCalendar: (RoutinePlan) -> Unit
@@ -83,6 +95,17 @@ fun AiChatScreen(
     val isPt = language == Language.PT
     var inputText by remember { mutableStateOf("") }
     var showRoutineDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(transcriptionState) {
+        if (transcriptionState is AudioTranscriptionUiState.Success) {
+            inputText = if (inputText.isBlank()) {
+                transcriptionState.transcript
+            } else {
+                "$inputText ${transcriptionState.transcript}"
+            }
+            onClearTranscriptionState()
+        }
+    }
 
     val listState = rememberLazyListState()
 
@@ -134,18 +157,34 @@ fun AiChatScreen(
                     }
                 }
 
+                VoiceTranscriptionStatusBanner(
+                    transcriptionState = transcriptionState,
+                    language = language,
+                    onDismiss = onClearTranscriptionState,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
                 // Chat Input Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    VoiceRecorderIconButton(
+                        transcriptionState = transcriptionState,
+                        language = language,
+                        onRecordingStateChanged = onRecordingStateChanged,
+                        onAudioCaptured = onAudioCaptured
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
                         placeholder = {
                             Text(
-                                if (isPt) "Converse com a IA ou peça ideias de estudo..."
-                                else "Chat with AI or ask for study ideas...",
+                                if (isPt) "Converse, digite ou use o microfone..."
+                                else "Chat, type or tap mic to speak...",
                                 fontSize = 13.sp
                             )
                         },

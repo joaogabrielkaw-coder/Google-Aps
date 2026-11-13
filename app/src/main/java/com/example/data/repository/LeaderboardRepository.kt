@@ -107,19 +107,47 @@ class LeaderboardRepository(context: Context) {
     )
 
     /**
-     * Salva ou atualiza a entrada do usuário autenticado no placar do Firestore
+     * Busca o perfil e progresso completo do usuário armazenado no Cloud Firestore.
      */
-    suspend fun syncUserToLeaderboard(account: UserAccount): Boolean = withContext(Dispatchers.IO) {
+    suspend fun fetchUserProfile(userId: String): Map<String, Any>? = withContext(Dispatchers.IO) {
+        if (userId.isBlank()) return@withContext null
+        try {
+            val userDoc = db.collection("users").document(userId).get().await()
+            if (userDoc.exists() && userDoc.data != null) {
+                return@withContext userDoc.data
+            }
+            val leaderDoc = db.collection("leaderboard").document(userId).get().await()
+            if (leaderDoc.exists() && leaderDoc.data != null) {
+                return@withContext leaderDoc.data
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Error fetching user profile for $userId: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Salva ou atualiza a entrada do usuário autenticado no placar do Firestore,
+     * incluindo progresso de desafios, quizzes, pontuação por tecnologia e paleta de cores.
+     */
+    suspend fun syncUserToLeaderboard(
+        account: UserAccount,
+        completedActivityIds: Set<String> = emptySet(),
+        completedQuizIds: Set<Int> = emptySet(),
+        techScores: Map<String, Int> = emptyMap(),
+        themeConfig: com.example.model.ThemeCustomization? = null
+    ): Boolean = withContext(Dispatchers.IO) {
         if (account.userId.isBlank()) return@withContext false
         try {
-            val payload = mapOf(
+            val payload: Map<String, Any> = mapOf(
                 "userId" to account.userId,
-                "displayName" to account.displayName,
+                "displayName" to account.displayName.ifBlank { "Dev" },
                 "email" to account.email,
                 "phoneNumber" to account.phoneNumber,
                 "photoUrl" to account.photoUrl,
                 "authProvider" to account.authMethod.name.lowercase(),
-                "totalScore" to account.totalScore,
+                "totalScore" to account.totalScore.coerceAtLeast(0),
                 "levelNumber" to account.levelNumber,
                 "levelTitle" to account.levelTitlePt,
                 "streakDays" to account.streakDays,
@@ -134,11 +162,24 @@ class LeaderboardRepository(context: Context) {
                 .set(payload)
                 .await()
 
-            // Salva no perfil privado do usuário
+            // Salva no perfil privado do usuário com metadados de progresso e tema
             try {
+                val userPayload: MutableMap<String, Any> = payload.toMutableMap()
+                if (completedActivityIds.isNotEmpty()) {
+                    userPayload["completedActivityIds"] = completedActivityIds.toList()
+                }
+                if (completedQuizIds.isNotEmpty()) {
+                    userPayload["completedQuizIds"] = completedQuizIds.toList()
+                }
+                if (techScores.isNotEmpty()) {
+                    userPayload["techScores"] = techScores
+                }
+                if (themeConfig != null) {
+                    userPayload["themeConfig"] = themeConfig.toStorageMap()
+                }
                 db.collection("users")
                     .document(account.userId)
-                    .set(payload)
+                    .set(userPayload, com.google.firebase.firestore.SetOptions.merge())
                     .await()
             } catch (e: Exception) {
                 Log.w(TAG, "Note: users collection write skipped or non-fatal: ${e.message}")
@@ -148,6 +189,34 @@ class LeaderboardRepository(context: Context) {
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync user to Firestore leaderboard: ${e.message}", e)
+            false
+        }
+    }
+
+    /**
+     * Salva imediatamente a customização de tema/cores escolhida pelo usuário na sua conta no Cloud Firestore.
+     */
+    suspend fun saveUserThemeConfig(
+        account: UserAccount,
+        themeConfig: com.example.model.ThemeCustomization
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (account.userId.isBlank()) return@withContext false
+        try {
+            val payload: Map<String, Any> = mapOf(
+                "userId" to account.userId,
+                "displayName" to account.displayName.ifBlank { "Dev" },
+                "totalScore" to account.totalScore.coerceAtLeast(0),
+                "themeConfig" to themeConfig.toStorageMap(),
+                "updatedAt" to com.google.firebase.Timestamp.now()
+            )
+            db.collection("users")
+                .document(account.userId)
+                .set(payload, com.google.firebase.firestore.SetOptions.merge())
+                .await()
+            Log.d(TAG, "Saved themeConfig (${themeConfig.presetId}) for user ${account.userId}")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to save themeConfig to Firestore: ${e.message}")
             false
         }
     }
@@ -222,11 +291,15 @@ class LeaderboardRepository(context: Context) {
 
         // 3. Adiciona o usuário logado com a pontuação atual
         if (currentAccount != null && currentAccount.isLoggedIn) {
+            val existingRemotePhoto = map[currentAccount.userId]?.photoUrl.orEmpty()
+            val mergedPhoto = currentAccount.photoUrl.ifBlank {
+                if (com.example.util.AvatarImageCodec.isShareableAvatarUrl(existingRemotePhoto)) existingRemotePhoto else ""
+            }
             val userEntry = LeaderboardEntry(
                 userId = currentAccount.userId,
                 displayName = currentAccount.displayName,
                 phoneNumber = currentAccount.phoneNumber,
-                photoUrl = currentAccount.photoUrl,
+                photoUrl = mergedPhoto,
                 authMethod = currentAccount.authMethod.name.lowercase(),
                 totalScore = currentAccount.totalScore,
                 levelNumber = currentAccount.levelNumber,

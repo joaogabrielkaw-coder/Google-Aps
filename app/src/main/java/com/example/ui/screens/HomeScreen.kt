@@ -32,14 +32,21 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -55,6 +62,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,21 +81,31 @@ import androidx.compose.ui.unit.sp
 import com.example.data.local.RoutineWithEvents
 import com.example.data.local.UserBadgeEntity
 import com.example.data.repository.LanguageDailyProgress
+import com.example.model.AiSuggestedTopic
+import com.example.model.AiStudyTopicsCatalog
 import com.example.model.Language
 import com.example.model.StudySession
 import com.example.model.Technology
 import com.example.model.UserScoreInfo
 import com.example.ui.AppDestination
+import com.example.ui.DailyScreenTimeManager
+import com.example.ui.DailyStudyGoalState
 import com.example.ui.UiStreakInfo
 import com.example.ui.components.DailyStudyProgressTrackerCard
+import com.example.ui.components.LevelRoadmapDialog
 import com.example.ui.components.UserBadgesCompactRow
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 @Composable
 fun HomeScreen(
@@ -102,7 +120,16 @@ fun HomeScreen(
     onSelectTrackerTech: (Technology) -> Unit = {},
     todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
     isLoggedIn: Boolean = false,
-    onLogQuickSession: (Technology, Int, Int) -> Unit = { _, _, _ -> },
+    todayScreenTimeMinutes: Int = 0,
+    screenTimeMinutes: Int = 0,
+    dailyStudyGoalState: DailyStudyGoalState = DailyStudyGoalState(),
+    isInitialAssessmentCompleted: Boolean = true,
+    onStartInitialAssessment: () -> Unit = {},
+    getTechScore: (Technology) -> Int = { 0 },
+    onPromptAiTopic: (Technology, String) -> Unit = { _, _ -> },
+    dailyLives: com.example.ui.DailyLivesInfo = com.example.ui.DailyLivesInfo(),
+    onOpenLivesInfo: () -> Unit = {},
+    onOpenWeeklyAiSummary: () -> Unit = {},
     onSelectDate: (String) -> Unit,
     onToggleSession: (StudySession) -> Unit,
     onOpenTech: (Technology) -> Unit,
@@ -117,6 +144,15 @@ fun HomeScreen(
 
     // Language filter state for daily routines and sessions
     var selectedLanguageFilter by remember { mutableStateOf<Technology?>(null) }
+    var showLevelRoadmapDialog by remember { mutableStateOf(false) }
+
+    if (showLevelRoadmapDialog) {
+        LevelRoadmapDialog(
+            scoreInfo = scoreInfo,
+            language = language,
+            onDismiss = { showLevelRoadmapDialog = false }
+        )
+    }
 
     // Sessions scheduled on the selected day
     val selectedDaySessions = sessions.filter { it.dateIso == selectedDateIso }
@@ -151,12 +187,180 @@ fun HomeScreen(
             HeroHeaderCard(
                 streakInfo = streakInfo,
                 scoreInfo = scoreInfo,
+                screenTimeMinutes = screenTimeMinutes,
+                dailyStudyGoalState = dailyStudyGoalState,
+                isInitialAssessmentCompleted = isInitialAssessmentCompleted,
                 isPt = isPt,
-                onOpenAi = { onNavigate(AppDestination.AI_CHAT) }
+                onOpenAi = { onNavigate(AppDestination.AI_CHAT) },
+                onStartInitialAssessment = onStartInitialAssessment,
+                onOpenLevelRoadmap = { showLevelRoadmapDialog = true }
             )
         }
 
-        // 2. User Badges & Milestones Preview
+        // 1b. Daily Lives Banner (25 vidas diárias)
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                com.example.ui.components.DailyLivesBannerCard(
+                    livesInfo = dailyLives,
+                    language = language,
+                    onClick = onOpenLivesInfo
+                )
+            }
+        }
+
+        // 2. High-impact Daily Progress Dashboard Card (Progresso diário do usuário)
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                DailyProgressDashboardOverviewCard(
+                    language = language,
+                    todayProgressMap = todayProgressMap,
+                    todayScreenTimeMinutes = todayScreenTimeMinutes,
+                    dailyStudyGoalState = dailyStudyGoalState,
+                    scoreInfo = scoreInfo,
+                    onPracticeNow = { onOpenTech(trackerSelectedTech) },
+                    onNavigateToAi = { onNavigate(AppDestination.AI_CHAT) },
+                    onOpenWeeklyAiSummary = onOpenWeeklyAiSummary
+                )
+            }
+        }
+
+        // 2b. DevStudio Lab: 3D Game & Scene, SQL Database Studio, AI Voice Transcriber
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, RedAccent.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onNavigate(AppDestination.GAME_3D) }
+                        .testTag("card_home_launch_3d_game")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.SportsEsports, contentDescription = null, tint = RedAccent, modifier = Modifier.size(22.dp))
+                        Text(
+                            text = if (isPt) "Jogo & 3D" else "3D Game",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, PurplePrimary.copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onNavigate(AppDestination.SQL_STUDIO) }
+                        .testTag("card_home_launch_sql_studio")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Storage, contentDescription = null, tint = PurplePrimary, modifier = Modifier.size(22.dp))
+                        Text(
+                            text = if (isPt) "Banco SQL" else "SQL DB",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00ACC1).copy(alpha = 0.45f)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onNavigate(AppDestination.AI_CHAT) }
+                        .testTag("card_home_launch_voice_ai")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Mic, contentDescription = null, tint = Color(0xFF00ACC1), modifier = Modifier.size(22.dp))
+                        Text(
+                            text = if (isPt) "Voz & IA" else "Voice AI",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        Brush.linearGradient(listOf(PurplePrimary.copy(alpha = 0.6f), RedAccent.copy(alpha = 0.6f)))
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onNavigate(AppDestination.SETTINGS) }
+                        .testTag("card_home_launch_theme_settings")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(22.dp))
+                        Text(
+                            text = if (isPt) "Cores" else "Themes",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Tópicos de estudo sugeridos pela IA
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                AiStudySuggestionsSection(
+                    language = language,
+                    scoreInfo = scoreInfo,
+                    onPromptAiTopic = onPromptAiTopic,
+                    onOpenTech = onOpenTech,
+                    onOpenAiChat = { onNavigate(AppDestination.AI_CHAT) }
+                )
+            }
+        }
+
+        // 4. Layout de grade para as tecnologias suportadas (8 tecnologias)
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                TechGridSection(
+                    allTechs = Technology.entries,
+                    getTechScore = getTechScore,
+                    todayProgressMap = todayProgressMap,
+                    language = language,
+                    onOpenTech = onOpenTech,
+                    onNavigateToHub = { onNavigate(AppDestination.TECH_HUB) }
+                )
+            }
+        }
+
+        // 5. User Badges & Milestones Preview
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                 UserBadgesCompactRow(
@@ -241,7 +445,6 @@ fun HomeScreen(
                     onSelectTech = onSelectTrackerTech,
                     todayProgressMap = todayProgressMap,
                     isLoggedIn = isLoggedIn,
-                    onLogQuickSession = onLogQuickSession,
                     onOpenTechDetail = onOpenTech
                 )
             }
@@ -511,45 +714,6 @@ fun HomeScreen(
             }
         }
 
-        // 5. Technologies Tracks Grid (Python, SQL, HTML, CSS, Java, MySQL, PostgreSQL, MongoDB)
-        item {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (isPt) "Trilhas de Aprendizado (8)" else "Learning Tracks (8)",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = if (isPt) "Ver detalhes" else "View tracks",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.clickable { onNavigate(AppDestination.TECH_HUB) }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val allTechs = listOf(
-                    Technology.PYTHON,
-                    Technology.SQL,
-                    Technology.HTML,
-                    Technology.CSS,
-                    Technology.JAVA,
-                    Technology.MYSQL,
-                    Technology.POSTGRESQL,
-                    Technology.MONGODB
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(allTechs) { tech ->
-                        TechChipCard(tech = tech, language = language, onClick = { onOpenTech(tech) })
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -835,9 +999,17 @@ fun HomeCalendarMonthGrid(
 fun HeroHeaderCard(
     streakInfo: UiStreakInfo,
     scoreInfo: UserScoreInfo = UserScoreInfo(),
+    screenTimeMinutes: Int = 0,
+    dailyStudyGoalState: DailyStudyGoalState = DailyStudyGoalState(),
+    isInitialAssessmentCompleted: Boolean = true,
     isPt: Boolean,
-    onOpenAi: () -> Unit
+    onOpenAi: () -> Unit,
+    onStartInitialAssessment: () -> Unit = {},
+    onOpenLevelRoadmap: () -> Unit = {}
 ) {
+    val rankLabel = if (isPt) scoreInfo.rankBadgePt else scoreInfo.rankBadgeEn
+    val remainingXp = (scoreInfo.nextLevelTarget - scoreInfo.totalScore).coerceAtLeast(0)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -865,10 +1037,10 @@ fun HeroHeaderCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isPt) "DevRoutine AI 🚀" else "DevRoutine AI 🚀",
+                                text = "DevRoutine AI 🚀",
                                 color = Color(0xFFFFCCD5),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -876,13 +1048,26 @@ fun HeroHeaderCard(
                             Spacer(modifier = Modifier.width(6.dp))
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFF1E072E).copy(alpha = 0.8f)
+                                color = Color(0xFF1E072E).copy(alpha = 0.85f)
                             ) {
                                 Text(
                                     text = "Nvl ${scoreInfo.levelNumber}",
                                     color = Color(0xFFFFD54F),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFFFD54F).copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = rankLabel,
+                                    color = Color(0xFFFFE57F),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 10.sp,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
@@ -894,6 +1079,8 @@ fun HeroHeaderCard(
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
                         )
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
                         shape = RoundedCornerShape(16.dp),
@@ -923,14 +1110,19 @@ fun HeroHeaderCard(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // XP Progress bar to next level
+                // XP Progress bar to next level + Level Roadmap trigger
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isPt) "Progresso para o próximo nível" else "Progress to next level",
+                        text = if (scoreInfo.isMaxLevel) {
+                            if (isPt) "Nível Máximo Alcançado!" else "Max Level Reached!"
+                        } else {
+                            if (isPt) "Faltam $remainingXp XP para o Nvl ${scoreInfo.levelNumber + 1}"
+                            else "$remainingXp XP left for Lv ${scoreInfo.levelNumber + 1}"
+                        },
                         color = Color(0xFFE2E0EC),
                         fontSize = 11.sp
                     )
@@ -953,6 +1145,173 @@ fun HeroHeaderCard(
                     color = Color(0xFFFFD54F),
                     trackColor = Color.White.copy(alpha = 0.2f)
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF1E072E).copy(alpha = 0.55f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minimumInteractiveComponentSize()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onOpenLevelRoadmap() }
+                        .testTag("btn_home_level_roadmap")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isPt) "❤️ Subir de nível restaura 25 vidas"
+                            else "❤️ Leveling up restores all 25 lives",
+                            fontSize = 11.sp,
+                            color = Color(0xFFFFD6E0),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isPt) "Ver Níveis" else "View Ranks",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFD54F)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = if (isPt) "Ver sistema de níveis" else "View level roadmap",
+                                tint = Color(0xFFFFD54F),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Cronômetro ao vivo de tempo de estudo ativo (com pausa automática por inatividade)
+                val isTimerRunning = dailyStudyGoalState.isTimerRunning
+                val timerColor = if (isTimerRunning) Color(0xFF80FFAB) else Color(0xFFFFD54F)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF1E072E).copy(alpha = 0.65f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("hero_live_study_timer")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = timerColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isPt) {
+                                    "Hoje: ${dailyStudyGoalState.formattedActiveTime} • Total: ${maxOf(screenTimeMinutes, dailyStudyGoalState.totalActiveMinutes)}m"
+                                } else {
+                                    "Today: ${dailyStudyGoalState.formattedActiveTime} • Total: ${maxOf(screenTimeMinutes, dailyStudyGoalState.totalActiveMinutes)}m"
+                                },
+                                fontSize = 11.sp,
+                                color = timerColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = timerColor.copy(alpha = 0.16f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(timerColor)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isTimerRunning) {
+                                        if (isPt) "Ativo" else "Live"
+                                    } else {
+                                        if (isPt) "Em pausa" else "Idle"
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = timerColor
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // CTA para diagnóstico inicial quando ainda não realizado
+                if (!isInitialAssessmentCompleted) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF2E124D),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFD54F)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onStartInitialAssessment() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFD54F),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (isPt) "🎯 Diagnóstico Inicial Dev (Opcional)" else "🎯 Initial Dev Diagnostic (Optional)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = if (isPt) "✨ Não é obrigatório • Toque aqui quando desejar definir seu nível e ganhar título + medalha!"
+                                        else "✨ Not mandatory • Tap anytime to calibrate your level and earn title + badge!",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFE2E0EC)
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD54F),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -1132,16 +1491,7 @@ fun StudyLanguageFilterRow(
     modifier: Modifier = Modifier
 ) {
     val isPt = language == Language.PT
-    val allTechnologies = listOf(
-        Technology.PYTHON,
-        Technology.SQL,
-        Technology.HTML,
-        Technology.CSS,
-        Technology.JAVA,
-        Technology.MYSQL,
-        Technology.POSTGRESQL,
-        Technology.MONGODB
-    )
+    val allTechnologies = Technology.entries
 
     Column(
         modifier = modifier
@@ -1340,4 +1690,938 @@ fun StudyLanguageFilterRow(
         }
     }
 }
+
+/**
+ * Dashboard Diário com telemetria de progresso, meta de minutos diários,
+ * contagem de desafios/quizzes e resumo de tecnologias estudadas no dia.
+ */
+@Composable
+fun DailyProgressDashboardOverviewCard(
+    language: Language,
+    todayProgressMap: Map<String, LanguageDailyProgress>,
+    todayScreenTimeMinutes: Int = 0,
+    dailyStudyGoalState: DailyStudyGoalState = DailyStudyGoalState(),
+    scoreInfo: UserScoreInfo,
+    onPracticeNow: () -> Unit = {},
+    onNavigateToAi: () -> Unit,
+    onOpenWeeklyAiSummary: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val languageMinutesToday = todayProgressMap.values.sumOf { it.minutesStudied }
+    val todaySecondsFromMinutes = maxOf(todayScreenTimeMinutes, languageMinutesToday) * 60
+    val effectiveActiveSecondsToday = maxOf(dailyStudyGoalState.activeSecondsToday, todaySecondsFromMinutes)
+    val todayTotalMinutes = effectiveActiveSecondsToday / 60
+    val todayTotalChallenges = todayProgressMap.values.sumOf { it.completedChallengesCount }
+    val todayTotalQuizzes = todayProgressMap.values.sumOf { it.completedQuizCount }
+    val todayTotalTasks = todayTotalChallenges + todayTotalQuizzes
+    val todayTotalXp = todayProgressMap.values.sumOf { it.xpEarned }
+
+    val dailyGoalMinutes = DailyScreenTimeManager.DAILY_GOAL_MINUTES
+    val dailyGoalSeconds = DailyScreenTimeManager.DAILY_GOAL_SECONDS
+    val progressFraction = (effectiveActiveSecondsToday.toFloat() / dailyGoalSeconds).coerceIn(0f, 1f)
+    val progressPercent = ((effectiveActiveSecondsToday.toFloat() / dailyGoalSeconds) * 100f).toInt().coerceIn(0, 100)
+    val remainingSeconds = (dailyGoalSeconds - effectiveActiveSecondsToday).coerceAtLeast(0)
+    val formattedActive = DailyScreenTimeManager.formatDurationMmSs(effectiveActiveSecondsToday)
+    val formattedGoal = DailyScreenTimeManager.formatDurationMmSs(dailyGoalSeconds)
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("card_daily_progress_dashboard"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.horizontalGradient(
+                listOf(PurplePrimary.copy(alpha = 0.7f), RedAccent.copy(alpha = 0.7f))
+            ),
+            width = 1.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TrendingUp,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (isPt) "Progresso Diário de Estudos" else "Daily Study Progress",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = if (isPt) "Meta: $dailyGoalMinutes min • Calculada pelo cronômetro ativo"
+                            else "Goal: $dailyGoalMinutes min • Auto-calculated from active timer",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (progressPercent >= 100) Color(0xFF4CAF50).copy(alpha = 0.2f) else PurplePrimary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        text = if (progressPercent >= 100) (if (isPt) "🎉 Meta Atingida!" else "🎉 Goal Reached!") else "$progressPercent% " + if (isPt) "concluído" else "completed",
+                        color = if (progressPercent >= 100) Color(0xFF4CAF50) else PurplePrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Live Activity Status Banner + Auto-Calculated Progress Bar
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val activeBadgeColor = if (dailyStudyGoalState.isTimerRunning) Color(0xFF4CAF50) else Color(0xFFFFB300)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = activeBadgeColor.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, activeBadgeColor.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("banner_daily_timer_status")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(activeBadgeColor)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (dailyStudyGoalState.isTimerRunning) {
+                                    if (isPt) "Cronômetro de atividade em execução" else "Activity timer running live"
+                                } else {
+                                    if (isPt) "Pausado por inatividade (interaja para retomar)" else "Paused on inactivity (interact to resume)"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = activeBadgeColor
+                            )
+                        }
+                        Text(
+                            text = "$formattedActive / $formattedGoal",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                LinearProgressIndicator(
+                    progress = { progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = if (progressPercent >= 100) Color(0xFF4CAF50) else PurplePrimary,
+                    trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (isPt) "$todayTotalMinutes de $dailyGoalMinutes min ativos" else "$todayTotalMinutes of $dailyGoalMinutes active min",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = if (remainingSeconds <= 0) {
+                            if (isPt) "Excelente consistência! 🔥" else "Great consistency! 🔥"
+                        } else {
+                            val remMin = remainingSeconds / 60
+                            val remSec = remainingSeconds % 60
+                            if (isPt) "Faltam ${remMin}m ${remSec}s hoje" else "${remMin}m ${remSec}s left today"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            // 3 Stat metric tiles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                StatMetricCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Timer,
+                    iconTint = Color(0xFF2196F3),
+                    title = if (isPt) "Tempo Ativo" else "Active Time",
+                    value = formattedActive,
+                    subtext = if (dailyStudyGoalState.isTimerRunning) {
+                        if (isPt) "ao vivo agora" else "live tracking"
+                    } else {
+                        if (isPt) "em pausa" else "paused"
+                    }
+                )
+                StatMetricCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.CheckCircle,
+                    iconTint = Color(0xFF4CAF50),
+                    title = if (isPt) "Atividades" else "Activities",
+                    value = "$todayTotalTasks",
+                    subtext = if (isPt) "desafios/quiz" else "challenges/quiz"
+                )
+                StatMetricCard(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Star,
+                    iconTint = Color(0xFFFFB300),
+                    title = if (isPt) "XP Hoje" else "XP Today",
+                    value = "+$todayTotalXp",
+                    subtext = if (isPt) "pontos" else "points"
+                )
+            }
+
+            // Active studied technologies breakdown pills or quick session suggestion
+            val studiedTechs = todayProgressMap.values.filter { it.minutesStudied > 0 || it.xpEarned > 0 }
+            if (studiedTechs.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (isPt) "Linguagens praticadas hoje:" else "Practiced languages today:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        studiedTechs.take(4).forEach { item ->
+                            val tech = Technology.entries.firstOrNull { it.id == item.techId }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = (tech?.accentColor ?: PurplePrimary).copy(alpha = 0.15f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    (tech?.accentColor ?: PurplePrimary).copy(alpha = 0.4f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(tech?.accentColor ?: PurplePrimary)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "${item.techName}: ${item.minutesStudied}m • +${item.xpEarned}XP",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Automatic screen-time notice + direct link to real challenges (costing lives)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isPt) "Meta contabilizada automaticamente pelo tempo de uso no app."
+                            else "Daily goal is tracked automatically from real app usage time.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                        )
+                        Button(
+                            onClick = onPracticeNow,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
+                        ) {
+                            Text(if (isPt) "Praticar" else "Practice", fontSize = 11.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+
+            // Quick 1-tap Weekly AI Summary Modal trigger
+            OutlinedButton(
+                onClick = onOpenWeeklyAiSummary,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, PurplePrimary.copy(alpha = 0.55f)),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("btn_home_weekly_ai_summary")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = PurplePrimary,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (isPt) "✨ Resumo Semanal com IA (Feedback de 7 dias)"
+                    else "✨ AI Weekly Study Summary (7-Day Feedback)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PurplePrimary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatMetricCard(
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    title: String,
+    value: String,
+    subtext: String
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/**
+ * Seção de Tópicos de Estudo Sugeridos pela IA com filtros e botões de ação para prática guiada.
+ */
+@Composable
+fun AiStudySuggestionsSection(
+    language: Language,
+    scoreInfo: UserScoreInfo,
+    onPromptAiTopic: (Technology, String) -> Unit,
+    onOpenTech: (Technology) -> Unit,
+    onOpenAiChat: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    var selectedCategoryFilter by remember { mutableStateOf("ALL") }
+
+    val filterOptions = listOf(
+        Pair("ALL", if (isPt) "Todos" else "All"),
+        Pair("JS_TS", "JavaScript / TS"),
+        Pair("KOTLIN", "Kotlin"),
+        Pair("GO", "Go"),
+        Pair("PYTHON", "Python"),
+        Pair("DATA", if (isPt) "SQL & Bancos" else "SQL & DB"),
+        Pair("FRONTEND", "Frontend"),
+        Pair("JAVA", "Java")
+    )
+
+    val allSuggestions = AiStudyTopicsCatalog.DEFAULT_SUGGESTIONS
+    val filteredSuggestions = remember(selectedCategoryFilter) {
+        when (selectedCategoryFilter) {
+            "JS_TS" -> allSuggestions.filter { it.tech in listOf(Technology.JAVASCRIPT, Technology.TYPESCRIPT) }
+            "KOTLIN" -> allSuggestions.filter { it.tech == Technology.KOTLIN }
+            "GO" -> allSuggestions.filter { it.tech == Technology.GO }
+            "PYTHON" -> allSuggestions.filter { it.tech == Technology.PYTHON }
+            "DATA" -> allSuggestions.filter {
+                it.tech in listOf(Technology.SQL, Technology.MYSQL, Technology.POSTGRESQL, Technology.MONGODB)
+            }
+            "FRONTEND" -> allSuggestions.filter {
+                it.tech in listOf(Technology.HTML, Technology.CSS, Technology.JAVASCRIPT, Technology.TYPESCRIPT)
+            }
+            "JAVA" -> allSuggestions.filter { it.tech == Technology.JAVA }
+            else -> allSuggestions
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("section_ai_study_suggestions"),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Section Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = if (isPt) "Tópicos Sugeridos pela IA" else "AI Study Suggestions",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = if (isPt) "Recomendações para nível ${scoreInfo.levelTitlePt}"
+                        else "Recommended for ${scoreInfo.levelTitleEn}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = PurplePrimary.copy(alpha = 0.15f),
+                modifier = Modifier.clickable { onOpenAiChat() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DevTutor",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PurplePrimary
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = PurplePrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
+
+        // Filter chips
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp)
+        ) {
+            items(filterOptions) { (key, label) ->
+                val isSelected = selectedCategoryFilter == key
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { selectedCategoryFilter = key },
+                    label = { Text(label, fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = PurplePrimary,
+                        selectedLabelColor = Color.White
+                    ),
+                    modifier = Modifier.testTag("filter_chip_ai_$key")
+                )
+            }
+        }
+
+        // Suggestions Cards
+        filteredSuggestions.take(4).forEach { suggestion ->
+            AiSuggestedTopicCard(
+                topic = suggestion,
+                language = language,
+                onPracticeWithAi = { onPromptAiTopic(suggestion.tech, suggestion.title(language)) },
+                onOpenTechTrack = { onOpenTech(suggestion.tech) }
+            )
+        }
+    }
+}
+
+/**
+ * Card individual de tópico recomendado pela IA com tags pedagógicas e botões de prática.
+ */
+@Composable
+fun AiSuggestedTopicCard(
+    topic: AiSuggestedTopic,
+    language: Language,
+    onPracticeWithAi: () -> Unit,
+    onOpenTechTrack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val tech = topic.tech
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("card_ai_topic_${topic.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.linearGradient(
+                listOf(tech.accentColor.copy(alpha = 0.5f), PurplePrimary.copy(alpha = 0.3f))
+            ),
+            width = 1.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Badges row: Tech chip + difficulty + XP + duration
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Tech Badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = tech.accentColor.copy(alpha = 0.2f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = tech.icon,
+                                contentDescription = null,
+                                tint = tech.accentColor,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = tech.displayName,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = tech.accentColor
+                            )
+                        }
+                    }
+
+                    // Difficulty badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface
+                    ) {
+                        Text(
+                            text = topic.difficulty(language),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                // XP and duration
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "~${topic.estimatedMinutes} min",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFFB300).copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = "+${topic.xpReward} XP",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFB300),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // Title & Explanation
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = topic.title(language),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = topic.explanation(language),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+            }
+
+            // Tags row
+            if (topic.tags.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    topic.tags.forEach { tag ->
+                        Text(
+                            text = "#$tag",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Action Buttons: Praticar com AI & Ver Trilha
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onPracticeWithAi,
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .testTag("btn_practice_ai_${topic.id}"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isPt) "Praticar com AI" else "Practice with AI",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onOpenTechTrack,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("btn_open_track_${topic.id}"),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.School,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isPt) "Ver Desafios" else "Challenges",
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Seção em Grade (Layout de Grade de 2 Colunas) para as 8 tecnologias suportadas:
+ * Python, SQL, HTML, CSS, Java, MySQL, PostgreSQL, MongoDB.
+ */
+@Composable
+fun TechGridSection(
+    allTechs: List<Technology>,
+    getTechScore: (Technology) -> Int,
+    todayProgressMap: Map<String, LanguageDailyProgress>,
+    language: Language,
+    onOpenTech: (Technology) -> Unit,
+    onNavigateToHub: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("section_technologies_grid"),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // Section Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Apps,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = if (isPt) "Trilhas de Aprendizado (${allTechs.size})" else "Learning Tracks (${allTechs.size})",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                    Text(
+                        text = if (isPt) "Grade de tecnologias suportadas" else "Supported technologies grid",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Text(
+                text = if (isPt) "Ver todas" else "View all",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { onNavigateToHub() }
+            )
+        }
+
+        // 2-Column Grid Layout for all technologies
+        allTechs.chunked(2).forEach { pair ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                TechGridCard(
+                    tech = pair[0],
+                    score = getTechScore(pair[0]),
+                    todayMinutes = todayProgressMap[pair[0].id]?.minutesStudied ?: 0,
+                    language = language,
+                    onClick = { onOpenTech(pair[0]) },
+                    modifier = Modifier.weight(1f)
+                )
+
+                if (pair.size > 1) {
+                    TechGridCard(
+                        tech = pair[1],
+                        score = getTechScore(pair[1]),
+                        todayMinutes = todayProgressMap[pair[1].id]?.minutesStudied ?: 0,
+                        language = language,
+                        onClick = { onOpenTech(pair[1]) },
+                        modifier = Modifier.weight(1f)
+                    )
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+        }
+    }
+}
+
+/**
+ * Card para cada tecnologia na Grade com indicador de nível/XP, minutos estudados hoje e categoria.
+ */
+@Composable
+fun TechGridCard(
+    tech: Technology,
+    score: Int,
+    todayMinutes: Int,
+    language: Language,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val categoryText = if (isPt) tech.categoryPt else tech.categoryEn
+    val targetNextXp = when {
+        score < 50 -> 50
+        score < 100 -> 100
+        score < 250 -> 250
+        score < 500 -> 500
+        else -> 1000
+    }
+    val scoreProgress = (score.toFloat() / targetNextXp).coerceIn(0f, 1f)
+
+    Card(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .testTag("tech_grid_card_${tech.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.linearGradient(
+                listOf(tech.accentColor.copy(alpha = 0.5f), tech.accentColor.copy(alpha = 0.15f))
+            ),
+            width = 1.dp
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Header with tech icon and today minutes pill
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(tech.accentColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = tech.icon,
+                        contentDescription = tech.displayName,
+                        tint = tech.accentColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                if (todayMinutes > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF2196F3).copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = "${todayMinutes}m " + if (isPt) "hoje" else "today",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2196F3),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+
+            // Tech Name & Category
+            Column {
+                Text(
+                    text = tech.displayName,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 1
+                )
+                Text(
+                    text = categoryText,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+
+            // Mini progress indicator for technology score / level
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                LinearProgressIndicator(
+                    progress = { scoreProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = tech.accentColor,
+                    trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "$score XP",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = tech.accentColor
+                    )
+                    Text(
+                        text = "/$targetNextXp",
+                        fontSize = 9.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
 

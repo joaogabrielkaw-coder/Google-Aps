@@ -32,6 +32,13 @@ data class LanguageDailyProgress(
     val updatedAtMillis: Long = System.currentTimeMillis()
 )
 
+data class DailyLanguageChallengeSummary(
+    val dateIso: String,
+    val countsByTech: Map<Technology, Int>
+) {
+    val totalChallenges: Int get() = countsByTech.values.sum()
+}
+
 class FirestoreProgressRepository(private val context: Context) {
 
     private val prefs = context.getSharedPreferences("devroutine_daily_progress_prefs", Context.MODE_PRIVATE)
@@ -95,25 +102,95 @@ class FirestoreProgressRepository(private val context: Context) {
     }
 
     /**
-     * Registra uma sessão rápida de estudos adicionando minutos e XP para a tecnologia hoje.
+     * Registra a conclusão de um desafio prático específico feito HOJE na linguagem informada,
+     * mantendo a contagem diária exata por linguagem e atualizando o Cloud Firestore.
      */
-    suspend fun logQuickStudySession(
+    suspend fun recordCompletedDailyChallenge(
         userId: String,
         tech: Technology,
-        minutesToAdd: Int,
-        xpToAdd: Int
+        activityId: String,
+        xpEarned: Int,
+        completedQuizzes: Int
+    ): Int = withContext(Dispatchers.IO) {
+        val todayIso = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val setKey = "${todayIso}_${tech.id}_challenge_ids"
+        val currentSet = prefs.getStringSet(setKey, emptySet())?.toMutableSet() ?: mutableSetOf()
+        currentSet.add(activityId)
+
+        val dailyCount = currentSet.size
+        val currentLocal = getLocalProgress(todayIso, tech.id)
+        val bestKey = "best_daily_challenges_${tech.id}"
+        val bestCount = maxOf(prefs.getInt(bestKey, 0), dailyCount)
+
+        prefs.edit()
+            .putStringSet(setKey, currentSet)
+            .putInt(bestKey, bestCount)
+            .apply()
+
+        saveLocalProgress(
+            todayIso = todayIso,
+            techId = tech.id,
+            challenges = dailyCount,
+            quizzes = maxOf(currentLocal.completedQuizCount, completedQuizzes),
+            xp = maxOf(currentLocal.xpEarned, xpEarned),
+            minutes = currentLocal.minutesStudied
+        )
+
+        if (userId.isNotBlank()) {
+            val docId = "${todayIso}_${tech.id}"
+            try {
+                val payload = mapOf(
+                    "userId" to userId,
+                    "techId" to tech.id,
+                    "techName" to tech.displayName,
+                    "dateIso" to todayIso,
+                    "completedChallengesCount" to dailyCount,
+                    "dailyBestChallenges" to bestCount,
+                    "completedChallengeIdsToday" to currentSet.toList(),
+                    "completedQuizCount" to maxOf(currentLocal.completedQuizCount, completedQuizzes),
+                    "xpEarned" to maxOf(currentLocal.xpEarned, xpEarned),
+                    "updatedAt" to Timestamp.now()
+                )
+                db.collection("users")
+                    .document(userId)
+                    .collection("daily_progress")
+                    .document(docId)
+                    .set(payload, SetOptions.merge())
+                    .await()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving daily challenge seal progress: ${e.message}", e)
+            }
+        }
+        dailyCount
+    }
+
+    fun getTodayChallengeCountsMap(): Map<Technology, Int> {
+        val todayIso = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return Technology.entries.associateWith { tech ->
+            val setSize = prefs.getStringSet("${todayIso}_${tech.id}_challenge_ids", null)?.size ?: 0
+            val savedInt = prefs.getInt("${todayIso}_${tech.id}_challenges", 0)
+            maxOf(setSize, savedInt)
+        }
+    }
+
+    /**
+     * Contabiliza automaticamente 1 minuto real de tempo de uso ativo no app para a tecnologia em foco.
+     * Não concede XP arbitrário manual (apenas atualiza o tempo real de tela).
+     */
+    suspend fun recordRealScreenTimeMinute(
+        userId: String,
+        tech: Technology
     ): Boolean = withContext(Dispatchers.IO) {
         val todayIso = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         val currentLocal = getLocalProgress(todayIso, tech.id)
-        val newMinutes = currentLocal.minutesStudied + minutesToAdd
-        val newXp = currentLocal.xpEarned + xpToAdd
+        val newMinutes = currentLocal.minutesStudied + 1
 
         saveLocalProgress(
             todayIso = todayIso,
             techId = tech.id,
             challenges = currentLocal.completedChallengesCount,
             quizzes = currentLocal.completedQuizCount,
-            xp = newXp,
+            xp = currentLocal.xpEarned,
             minutes = newMinutes
         )
 
@@ -131,16 +208,14 @@ class FirestoreProgressRepository(private val context: Context) {
                 "techId" to tech.id,
                 "techName" to tech.displayName,
                 "dateIso" to todayIso,
-                "minutesStudied" to FieldValue.increment(minutesToAdd.toLong()),
-                "xpEarned" to FieldValue.increment(xpToAdd.toLong()),
+                "minutesStudied" to FieldValue.increment(1L),
                 "updatedAt" to Timestamp.now()
             )
 
             docRef.set(updates, SetOptions.merge()).await()
-            Log.d(TAG, "Logged quick study for ${tech.displayName}: +$minutesToAdd min, +$xpToAdd XP")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error logging quick study session to Firestore: ${e.message}", e)
+            Log.e(TAG, "Error recording real screen time minute to Firestore: ${e.message}", e)
             false
         }
     }
@@ -194,6 +269,81 @@ class FirestoreProgressRepository(private val context: Context) {
                         )
                     }
                     trySend(resultMap)
+                }
+            }
+
+        awaitClose { listener.remove() }
+    }.flowOn(Dispatchers.IO)
+
+    fun getLocalWeeklyChallengeHistory(
+        days: Int = 7,
+        endDate: LocalDate = LocalDate.now()
+    ): List<DailyLanguageChallengeSummary> {
+        val safeDays = days.coerceAtLeast(1)
+        val startDate = endDate.minusDays((safeDays - 1).toLong())
+        return (0 until safeDays).map { offset ->
+            val date = startDate.plusDays(offset.toLong())
+            val dateIso = date.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val counts = Technology.entries.associateWith { tech ->
+                val setSize = prefs.getStringSet("${dateIso}_${tech.id}_challenge_ids", null)?.size ?: 0
+                val savedInt = prefs.getInt("${dateIso}_${tech.id}_challenges", 0)
+                maxOf(setSize, savedInt)
+            }
+            DailyLanguageChallengeSummary(dateIso = dateIso, countsByTech = counts)
+        }
+    }
+
+    /**
+     * Observa o histórico dos últimos 7 dias de desafios concluídos por linguagem,
+     * combinando dados locais imediatos com registros do Cloud Firestore.
+     */
+    fun observeWeeklyChallengeHistory(
+        userId: String,
+        days: Int = 7
+    ): Flow<List<DailyLanguageChallengeSummary>> = callbackFlow {
+        val today = LocalDate.now()
+        val safeDays = days.coerceAtLeast(1)
+        val startDateIso = today.minusDays((safeDays - 1).toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+        val initialLocal = getLocalWeeklyChallengeHistory(safeDays, today)
+        trySend(initialLocal)
+
+        if (userId.isBlank()) {
+            awaitClose { }
+            return@callbackFlow
+        }
+
+        val listener = db.collection("users")
+            .document(userId)
+            .collection("daily_progress")
+            .whereGreaterThanOrEqualTo("dateIso", startDateIso)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.w(TAG, "Error observing weekly challenge history: ${error.message}")
+                    return@addSnapshotListener
+                }
+
+                if (snapshot != null) {
+                    val base = getLocalWeeklyChallengeHistory(safeDays, LocalDate.now())
+                        .associate { it.dateIso to it.countsByTech.toMutableMap() }
+                        .toMutableMap()
+
+                    for (doc in snapshot.documents) {
+                        val dateIso = doc.getString("dateIso") ?: continue
+                        val techId = doc.getString("techId") ?: continue
+                        val tech = Technology.fromId(techId) ?: continue
+                        val dayMap = base[dateIso] ?: continue
+                        val remoteCount = (doc.get("completedChallengesCount") as? Number)?.toInt() ?: 0
+                        val existing = dayMap[tech] ?: 0
+                        dayMap[tech] = maxOf(existing, remoteCount)
+                    }
+
+                    val merged = base.entries
+                        .sortedBy { it.key }
+                        .map { (dateIso, counts) ->
+                            DailyLanguageChallengeSummary(dateIso = dateIso, countsByTech = counts)
+                        }
+                    trySend(merged)
                 }
             }
 

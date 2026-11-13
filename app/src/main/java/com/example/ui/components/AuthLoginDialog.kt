@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -71,9 +73,8 @@ import com.example.model.AuthMethod
 import com.example.model.Language
 import com.example.model.UserAccount
 import com.example.model.UserScoreInfo
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.PurplePrimaryLight
-import com.example.ui.theme.RedAccent
+import androidx.compose.material.icons.filled.Palette
+import com.example.ui.theme.LocalDevRoutineColors
 
 @Composable
 fun AuthLoginDialog(
@@ -87,8 +88,13 @@ fun AuthLoginDialog(
     onPhoneSignIn: (name: String, phoneNumber: String) -> Unit,
     onSyncLeaderboard: () -> Unit,
     onSignOut: () -> Unit,
+    onUpdatePhoto: (String) -> Unit = {},
+    onOpenThemeSettings: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
+    val brand = LocalDevRoutineColors.current
+    val PurplePrimary = brand.primary
+    val RedAccent = brand.accent
     val isPt = language == Language.PT
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Google, 1 = Phone Number
 
@@ -168,6 +174,8 @@ fun AuthLoginDialog(
                         badgesCount = badgesCount,
                         language = language,
                         isLoading = isLoading,
+                        onUpdatePhoto = onUpdatePhoto,
+                        onOpenThemeSettings = onOpenThemeSettings,
                         onSync = onSyncLeaderboard,
                         onSignOut = onSignOut
                     )
@@ -399,32 +407,59 @@ private fun LoggedInProfileView(
     badgesCount: Int,
     language: Language,
     isLoading: Boolean,
+    onUpdatePhoto: (String) -> Unit,
+    onOpenThemeSettings: () -> Unit,
     onSync: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val isPt = language == Language.PT
+    val brand = LocalDevRoutineColors.current
+    val PurplePrimary = brand.primary
+    val RedAccent = brand.accent
+    var showPhotoDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Avatar with gradient ring
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
-            contentAlignment = Alignment.Center
+        // Avatar interativo com suporte a foto de galeria e avatares dev
+        UserAvatar(
+            photoUrl = user.photoUrl,
+            displayName = user.displayName,
+            size = 80.dp,
+            borderWidth = 3.dp,
+            borderColor = RedAccent,
+            showEditBadge = true,
+            onClick = { showPhotoDialog = true }
+        )
+
+        TextButton(
+            onClick = { showPhotoDialog = true },
+            modifier = Modifier.padding(top = 2.dp)
         ) {
+            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp), tint = PurplePrimary)
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = user.displayName.take(2).uppercase(),
-                color = Color.White,
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
+                text = if (isPt) "Alterar Foto de Perfil" else "Change Profile Photo",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = PurplePrimary
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        if (showPhotoDialog) {
+            ProfilePhotoDialog(
+                currentPhotoUrl = user.photoUrl,
+                displayName = user.displayName,
+                language = language,
+                onSavePhoto = { newPhoto ->
+                    onUpdatePhoto(newPhoto)
+                },
+                onDismiss = { showPhotoDialog = false }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
             text = user.displayName,
@@ -545,6 +580,23 @@ private fun LoggedInProfileView(
                     fontSize = 13.sp
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Action: Personalizar Cores & Tema
+        OutlinedButton(
+            onClick = onOpenThemeSettings,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().testTag("btn_profile_open_theme_settings")
+        ) {
+            Icon(Icons.Default.Palette, contentDescription = null, tint = PurplePrimary, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (isPt) "Personalizar Cores & Tema" else "Customize Colors & Theme",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))

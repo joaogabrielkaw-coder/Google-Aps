@@ -33,13 +33,26 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WorkspacePremium
+import com.example.data.local.UserBadgeEntity
+import com.example.ui.DailyLivesInfo
+import com.example.ui.components.BadgeDetailDialog
+import com.example.ui.components.DailyLivesInfoDialog
+import com.example.ui.components.DailyLivesPill
+import com.example.ui.components.DailySealMedallionTile
+import com.example.ui.components.DailySealTier
+import com.example.ui.components.GentleRetryFeedbackDialog
+import com.example.ui.components.OutOfLivesDialog
+import com.example.ui.components.VictoryCelebrationDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -78,6 +91,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -86,6 +101,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.repository.TechContentRepository
 import com.example.model.ActivityDifficulty
+import com.example.model.AppGeneralSettings
 import com.example.model.Language
 import com.example.model.PracticalActivity
 import com.example.model.QuizQuestion
@@ -93,9 +109,15 @@ import com.example.model.RoadmapStep
 import com.example.model.Technology
 import com.example.model.UserScoreInfo
 import com.example.ui.components.CodeSnippetCard
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalAccessibilitySettings
+import com.example.ui.theme.LocalDevRoutineColors
 import kotlinx.coroutines.delay
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 @Composable
 fun TechHubScreen(
@@ -104,13 +126,38 @@ fun TechHubScreen(
 ) {
     val isPt = language == Language.PT
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
-    val categories = if (isPt) listOf("Todas (8)", "Linguagens & Web (5)", "Bancos de Dados (3)")
-    else listOf("All (8)", "Languages & Web (5)", "Databases (3)")
+    val allTechs = Technology.entries
+    val langWebTechs = listOf(
+        Technology.JAVASCRIPT,
+        Technology.TYPESCRIPT,
+        Technology.KOTLIN,
+        Technology.GO,
+        Technology.PYTHON,
+        Technology.JAVA,
+        Technology.HTML,
+        Technology.CSS
+    )
+    val dbTechs = listOf(
+        Technology.SQL,
+        Technology.MYSQL,
+        Technology.POSTGRESQL,
+        Technology.MONGODB
+    )
+
+    val categories = if (isPt) listOf(
+        "Todas (${allTechs.size})",
+        "Linguagens & Web (${langWebTechs.size})",
+        "Bancos de Dados (${dbTechs.size})"
+    ) else listOf(
+        "All (${allTechs.size})",
+        "Languages & Web (${langWebTechs.size})",
+        "Databases (${dbTechs.size})"
+    )
 
     val filteredTechs = when (selectedCategoryIndex) {
-        1 -> listOf(Technology.PYTHON, Technology.SQL, Technology.HTML, Technology.CSS, Technology.JAVA)
-        2 -> listOf(Technology.MYSQL, Technology.POSTGRESQL, Technology.MONGODB)
-        else -> Technology.entries
+        1 -> langWebTechs
+        2 -> dbTechs
+        else -> allTechs
     }
 
     Column(
@@ -265,10 +312,21 @@ fun TechDetailScreen(
     pointsFeedback: String?,
     onDismissPointsFeedback: () -> Unit,
     onBack: () -> Unit,
-    onAskAi: () -> Unit
+    onAskAi: () -> Unit,
+    todayChallengesCount: Int = 0,
+    badges: List<UserBadgeEntity> = emptyList(),
+    dailyLives: DailyLivesInfo = DailyLivesInfo(),
+    appGeneralSettings: AppGeneralSettings = AppGeneralSettings(),
+    onConsumeLife: () -> Boolean = { true }
 ) {
     val isPt = language == Language.PT
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalAccessibilitySettings.current.hapticFeedbackEnabled
     var selectedTabIndex by remember { mutableIntStateOf(1) } // Default to Hands-on Practice tab
+    var showLivesInfoDialog by remember { mutableStateOf(false) }
+    var showOutOfLivesDialog by remember { mutableStateOf(false) }
+    var victoryData by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var gentleRetryHint by remember { mutableStateOf<String?>(null) }
 
     val tabTitles = if (isPt) {
         listOf("Visão Geral", "Atividades Práticas", "Quiz com Pontos", "Cheatsheet", "Roadmap")
@@ -317,29 +375,39 @@ fun TechDetailScreen(
                             )
                         }
 
-                        // Technology XP Chip
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.padding(end = 12.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(end = 8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            DailyLivesPill(
+                                livesInfo = dailyLives,
+                                onClick = { showLivesInfoDialog = true }
+                            )
+
+                            // Technology XP Chip
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.EmojiEvents,
-                                    contentDescription = null,
-                                    tint = RedAccent,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "$techCurrentScore XP",
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.EmojiEvents,
+                                        contentDescription = null,
+                                        tint = RedAccent,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "$techCurrentScore XP",
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -422,12 +490,38 @@ fun TechDetailScreen(
                         tech = tech,
                         language = language,
                         scoreInfo = scoreInfo,
+                        todayChallengesCount = todayChallengesCount,
+                        badges = badges,
+                        onTryConsumeLife = {
+                            val ok = onConsumeLife()
+                            if (!ok) showOutOfLivesDialog = true
+                            ok
+                        },
+                        onVictory = { title, xp ->
+                            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (appGeneralSettings.showCelebrationDialogs) victoryData = title to xp
+                        },
+                        onGentleMistake = { hint ->
+                            if (appGeneralSettings.showGentleRetryTips) gentleRetryHint = hint
+                        },
                         onAwardPoints = { actId, pts -> onAwardActivityPoints(tech, actId, pts) }
                     )
                     2 -> TechQuizTab(
                         tech = tech,
                         language = language,
                         scoreInfo = scoreInfo,
+                        onTryConsumeLife = {
+                            val ok = onConsumeLife()
+                            if (!ok) showOutOfLivesDialog = true
+                            ok
+                        },
+                        onVictory = { title, xp ->
+                            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (appGeneralSettings.showCelebrationDialogs) victoryData = title to xp
+                        },
+                        onGentleMistake = { hint ->
+                            if (appGeneralSettings.showGentleRetryTips) gentleRetryHint = hint
+                        },
                         onAwardQuizPoints = { qId, pts -> onAwardQuizPoints(tech, qId, pts) }
                     )
                     3 -> TechCheatsheetTab(tech, language)
@@ -437,7 +531,7 @@ fun TechDetailScreen(
 
             // Animated points feedback banner at top
             AnimatedVisibility(
-                visible = pointsFeedback != null,
+                visible = pointsFeedback != null && appGeneralSettings.showXpToastBanners,
                 enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
                 exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
                 modifier = Modifier
@@ -471,6 +565,42 @@ fun TechDetailScreen(
                 }
             }
         }
+    }
+
+    if (showLivesInfoDialog) {
+        DailyLivesInfoDialog(
+            livesInfo = dailyLives,
+            language = language,
+            onDismiss = { showLivesInfoDialog = false }
+        )
+    }
+
+    if (showOutOfLivesDialog) {
+        OutOfLivesDialog(
+            language = language,
+            onDismiss = { showOutOfLivesDialog = false }
+        )
+    }
+
+    victoryData?.let { (winTitle, winXp) ->
+        VictoryCelebrationDialog(
+            title = winTitle,
+            xpEarned = winXp,
+            remainingLives = dailyLives.remaining,
+            maxLives = dailyLives.maxDaily,
+            language = language,
+            onDismiss = { victoryData = null }
+        )
+    }
+
+    gentleRetryHint?.let { hint ->
+        GentleRetryFeedbackDialog(
+            hintText = hint,
+            remainingLives = dailyLives.remaining,
+            maxLives = dailyLives.maxDaily,
+            language = language,
+            onDismiss = { gentleRetryHint = null }
+        )
     }
 }
 
@@ -561,12 +691,27 @@ fun TechPracticalActivitiesTab(
     tech: Technology,
     language: Language,
     scoreInfo: UserScoreInfo,
+    todayChallengesCount: Int = 0,
+    badges: List<UserBadgeEntity> = emptyList(),
+    onTryConsumeLife: () -> Boolean = { true },
+    onVictory: (String, Int) -> Unit = { _, _ -> },
+    onGentleMistake: (String) -> Unit = {},
     onAwardPoints: (String, Int) -> Unit
 ) {
     val isPt = language == Language.PT
     val allActivities = remember(tech) { TechContentRepository.getPracticalActivities(tech) }
     var selectedDifficultyFilter by remember { mutableStateOf<ActivityDifficulty?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var selectedSealForDetail by remember { mutableStateOf<UserBadgeEntity?>(null) }
+
+    val techDailyBadges = remember(badges, tech) {
+        val map = badges.filter { it.id.startsWith("badge_daily_${tech.id}_") }.associateBy { it.id }
+        listOfNotNull(
+            map["badge_daily_${tech.id}_bronze"]?.let { DailySealTier.BRONZE to it },
+            map["badge_daily_${tech.id}_silver"]?.let { DailySealTier.SILVER to it },
+            map["badge_daily_${tech.id}_gold"]?.let { DailySealTier.GOLD to it }
+        )
+    }
 
     val filteredActivities = remember(selectedDifficultyFilter, searchQuery, allActivities) {
         allActivities.filter { activity ->
@@ -645,6 +790,18 @@ fun TechPracticalActivitiesTab(
                             trackColor = MaterialTheme.colorScheme.surface
                         )
                     }
+                }
+
+                // Daily Language Seal Progress Banner
+                if (techDailyBadges.isNotEmpty()) {
+                    DailyLanguageSealBanner(
+                        tech = tech,
+                        todayCount = todayChallengesCount,
+                        tierBadges = techDailyBadges,
+                        language = language,
+                        onSealClick = { selectedSealForDetail = it }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
 
                 // Search Bar
@@ -734,8 +891,112 @@ fun TechPracticalActivitiesTab(
                 challengeNumber = allActivities.indexOf(activity) + 1,
                 isPt = isPt,
                 isAlreadyCompleted = isCompleted,
+                onTryConsumeLife = onTryConsumeLife,
+                onVictory = onVictory,
+                onGentleMistake = onGentleMistake,
                 onCompleteActivity = { pts -> onAwardPoints(activity.id, pts) }
             )
+        }
+    }
+
+    selectedSealForDetail?.let { badge ->
+        BadgeDetailDialog(
+            badge = badge,
+            language = language,
+            onDismiss = { selectedSealForDetail = null }
+        )
+    }
+}
+
+@Composable
+fun DailyLanguageSealBanner(
+    tech: Technology,
+    todayCount: Int,
+    tierBadges: List<Pair<DailySealTier, UserBadgeEntity>>,
+    language: Language,
+    onSealClick: (UserBadgeEntity) -> Unit
+) {
+    val isPt = language == Language.PT
+    val nextLocked = tierBadges.firstOrNull { !it.second.isUnlocked }
+    val statusLine = if (nextLocked != null) {
+        val remaining = (nextLocked.first.target - todayCount).coerceAtLeast(1)
+        val tierLabel = if (isPt) nextLocked.first.labelPt else nextLocked.first.labelEn
+        if (isPt) "Faltam $remaining hoje para o Selo $tierLabel (+${nextLocked.first.xpReward} XP)"
+        else "$remaining more today for $tierLabel Seal (+${nextLocked.first.xpReward} XP)"
+    } else {
+        if (isPt) "Todos os Selos Diários de ${tech.displayName} conquistados!"
+        else "All Daily Seals for ${tech.displayName} earned!"
+    }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, tech.accentColor.copy(alpha = 0.45f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("banner_daily_seals_${tech.id}")
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WorkspacePremium,
+                        contentDescription = null,
+                        tint = DailySealTier.GOLD.mainColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = if (isPt) "Selos Diários em ${tech.displayName}" else "Daily Seals in ${tech.displayName}",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = statusLine,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = tech.accentColor.copy(alpha = 0.16f)
+                ) {
+                    Text(
+                        text = if (isPt) "$todayCount hoje" else "$todayCount today",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = tech.accentColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tierBadges.forEach { (tier, badge) ->
+                    DailySealMedallionTile(
+                        tech = tech,
+                        tier = tier,
+                        badge = badge,
+                        todayCount = todayCount,
+                        language = language,
+                        onClick = { onSealClick(badge) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
         }
     }
 }
@@ -746,6 +1007,9 @@ fun PracticalActivityCard(
     challengeNumber: Int = 1,
     isPt: Boolean,
     isAlreadyCompleted: Boolean,
+    onTryConsumeLife: () -> Boolean = { true },
+    onVictory: (String, Int) -> Unit = { _, _ -> },
+    onGentleMistake: (String) -> Unit = {},
     onCompleteActivity: (Int) -> Unit
 ) {
     var userCode by remember(activity.id) { mutableStateOf(activity.starterCode) }
@@ -888,6 +1152,8 @@ fun PracticalActivityCard(
                     .padding(8.dp)
             ) {
                 Column {
+                    val isAlreadySolved = isAlreadyCompleted || validationResult == true
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -902,16 +1168,19 @@ fun PracticalActivityCard(
 
                         IconButton(
                             onClick = {
-                                userCode = activity.starterCode
-                                validationResult = null
-                                feedbackMessage = null
+                                if (!isAlreadySolved) {
+                                    userCode = activity.starterCode
+                                    validationResult = null
+                                    feedbackMessage = null
+                                }
                             },
+                            enabled = !isAlreadySolved,
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "Resetar",
-                                tint = Color.LightGray,
+                                tint = if (isAlreadySolved) Color.DarkGray else Color.LightGray,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -921,14 +1190,15 @@ fun PracticalActivityCard(
 
                     OutlinedTextField(
                         value = userCode,
-                        onValueChange = { userCode = it },
+                        onValueChange = { if (!isAlreadySolved) userCode = it },
+                        readOnly = isAlreadySolved,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("code_input_${activity.id}"),
                         textStyle = TextStyle(
                             fontFamily = FontFamily.Monospace,
                             fontSize = 13.sp,
-                            color = Color(0xFFE2E0EC)
+                            color = if (isAlreadySolved) Color(0xFF80FFAB) else Color(0xFFE2E0EC)
                         ),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent,
@@ -937,6 +1207,37 @@ fun PracticalActivityCard(
                             unfocusedContainerColor = Color.Transparent
                         )
                     )
+                }
+            }
+
+            // Locked attempt notification banner
+            if (isAlreadyCompleted || validationResult == true) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF1B4D2B).copy(alpha = 0.35f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1B4D2B)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = Color(0xFF80FFAB),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isPt) "🔒 Desafio superado! Limite de 1 tentativa única concluída (XP garantido)."
+                            else "🔒 Challenge solved! 1-attempt single completion limit active (XP secured).",
+                            fontSize = 11.sp,
+                            color = Color(0xFF80FFAB),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
@@ -967,46 +1268,74 @@ fun PracticalActivityCard(
                     )
                 }
 
+                val isLocked = isAlreadyCompleted || validationResult == true
                 Button(
                     onClick = {
-                        val isCorrect = validateUserCode(userCode, activity)
-                        validationResult = isCorrect
-                        if (isCorrect) {
-                            feedbackMessage = if (isPt) {
-                                "Parabéns! Sua solução atende a todos os critérios. +${activity.pointsValue} XP adicionados!"
-                            } else {
-                                "Great job! Your solution meets all criteria. +${activity.pointsValue} XP earned!"
-                            }
-                            onCompleteActivity(activity.pointsValue)
-                        } else {
-                            val missing = activity.requiredKeywords.firstOrNull { kw ->
-                                !userCode.contains(kw, ignoreCase = true)
-                            }
-                            feedbackMessage = if (isPt) {
-                                if (missing != null) "Dica de correção: certifique-se de utilizar '$missing' na sintaxe."
-                                else "Quase lá! Revise a lógica e os parâmetros solicitados no enunciado."
-                            } else {
-                                if (missing != null) "Correction hint: ensure you include '$missing' in your code."
-                                else "Almost there! Double check the logic and requirements."
+                        if (!isLocked) {
+                            if (onTryConsumeLife()) {
+                                val isCorrect = validateUserCode(userCode, activity)
+                                validationResult = isCorrect
+                                if (isCorrect) {
+                                    feedbackMessage = if (isPt) {
+                                        "🎉 Parabéns! Solução impecável! +${activity.pointsValue} XP conquistados com brilho!"
+                                    } else {
+                                        "🎉 Congratulations! Flawless solution! +${activity.pointsValue} XP earned!"
+                                    }
+                                    onCompleteActivity(activity.pointsValue)
+                                    onVictory(if (isPt) activity.titlePt else activity.titleEn, activity.pointsValue)
+                                } else {
+                                    val missing = activity.requiredKeywords.firstOrNull { kw ->
+                                        !userCode.contains(kw, ignoreCase = true)
+                                    }
+                                    val hintMsg = if (isPt) {
+                                        if (missing != null) "Tente novamente! Dica carinhosa: verifique se utilizou '$missing' no seu código."
+                                        else "Tente novamente! Você está bem perto — revise a lógica e a estrutura esperada."
+                                    } else {
+                                        if (missing != null) "Try again! Gentle tip: make sure to include '$missing' in your code."
+                                        else "Try again! You're super close — review the logic and structure."
+                                    }
+                                    feedbackMessage = hintMsg
+                                    onGentleMistake(hintMsg)
+                                }
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = RedAccent),
+                    enabled = !isLocked,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isLocked) Color(0xFF1B4D2B) else RedAccent,
+                        disabledContainerColor = Color(0xFF1B4D2B)
+                    ),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     modifier = Modifier.testTag("btn_verify_${activity.id}")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isPt) "Testar Solução" else "Test Solution",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
+                    if (isLocked) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color(0xFF80FFAB),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isPt) "Concluído (1 Tentativa)" else "Solved (1 Attempt)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF80FFAB)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isPt) "Testar Solução" else "Test Solution",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
 
@@ -1042,24 +1371,27 @@ fun PracticalActivityCard(
                 Spacer(modifier = Modifier.height(10.dp))
                 val isSuccess = validationResult == true
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isSuccess) Color(0xFF13381E) else Color(0xFF470C15),
-                    border = CardDefaults.outlinedCardBorder().copy(width = 1.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isSuccess) Color(0xFF13381E) else Color(0xFF2B1B3D),
+                    border = BorderStroke(
+                        1.2.dp,
+                        if (isSuccess) Color(0xFF4ADE80) else Color(0xFFC4B5FD).copy(alpha = 0.6f)
+                    )
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Lightbulb,
                                 contentDescription = null,
-                                tint = if (isSuccess) Color(0xFF80FFAB) else Color(0xFFFF94A3),
+                                tint = if (isSuccess) Color(0xFF80FFAB) else Color(0xFFFDBA74),
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isSuccess) (if (isPt) "Sucesso! Código Válido 🎉" else "Success! Valid Code 🎉")
-                                else (if (isPt) "Ajuste Necessário" else "Adjustment Needed"),
+                                text = if (isSuccess) (if (isPt) "🎉 Parabéns! Vitória Conquistada ✨" else "🎉 Congratulations! Victory ✨")
+                                else (if (isPt) "💜 Quase lá! Tente Novamente ✨" else "💜 Almost There! Try Again ✨"),
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSuccess) Color(0xFF80FFAB) else Color(0xFFFF94A3),
+                                color = if (isSuccess) Color(0xFF80FFAB) else Color(0xFFE9D5FF),
                                 fontSize = 13.sp
                             )
                         }
@@ -1163,6 +1495,9 @@ fun TechQuizTab(
     tech: Technology,
     language: Language,
     scoreInfo: UserScoreInfo,
+    onTryConsumeLife: () -> Boolean = { true },
+    onVictory: (String, Int) -> Unit = { _, _ -> },
+    onGentleMistake: (String) -> Unit = {},
     onAwardQuizPoints: (Int, Int) -> Unit
 ) {
     val isPt = language == Language.PT
@@ -1223,10 +1558,11 @@ fun TechQuizTab(
             }
 
             items(questions) { q ->
-                val selectedOption = userAnswers[q.id]
+                val isAlreadyScored = scoreInfo.completedQuizIds.contains(q.id)
+                val selectedOption = userAnswers[q.id] ?: if (isAlreadyScored) q.correctIndex else null
                 val hasAnswered = selectedOption != null
                 val isCorrect = selectedOption == q.correctIndex
-                val isAlreadyScored = scoreInfo.completedQuizIds.contains(q.id)
+                val isLocked = isAlreadyScored || (hasAnswered && isCorrect)
 
                 Card(
                     shape = RoundedCornerShape(14.dp),
@@ -1262,15 +1598,59 @@ fun TechQuizTab(
                             }
                         }
 
+                        if (isLocked) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF1B4D2B).copy(alpha = 0.25f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = Color(0xFF80FFAB),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isPt) "Resposta correta confirmada — tentativa única concluída."
+                                    else "Correct answer confirmed — single attempt completed.",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF80FFAB),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(10.dp))
 
                         q.options(language).forEachIndexed { index, optionText ->
                             val optionSelected = selectedOption == index
                             val optionBg = when {
                                 hasAnswered && index == q.correctIndex -> Color(0xFF1B4D2B)
-                                hasAnswered && optionSelected && !isCorrect -> Color(0xFF6B1220)
+                                hasAnswered && optionSelected && !isCorrect -> Color(0xFF4A2040)
                                 optionSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                                 else -> Color.Transparent
+                            }
+
+                            val onSelectQuizOption = {
+                                if (!isLocked && (!hasAnswered || !isCorrect)) {
+                                    if (onTryConsumeLife()) {
+                                        userAnswers[q.id] = index
+                                        if (index == q.correctIndex) {
+                                            onAwardQuizPoints(q.id, q.pointsValue)
+                                            onVictory(q.question(language), q.pointsValue)
+                                        } else {
+                                            onGentleMistake(
+                                                if (isPt) "Essa alternativa não foi a certa desta vez, mas você pode tentar novamente!"
+                                                else "Not quite this option, but you can gently try another one!"
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
                             Row(
@@ -1278,27 +1658,14 @@ fun TechQuizTab(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(optionBg)
-                                    .clickable {
-                                        if (!hasAnswered) {
-                                            userAnswers[q.id] = index
-                                            if (index == q.correctIndex) {
-                                                onAwardQuizPoints(q.id, q.pointsValue)
-                                            }
-                                        }
-                                    }
+                                    .clickable(enabled = !isLocked) { onSelectQuizOption() }
                                     .padding(horizontal = 8.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
                                     selected = optionSelected,
-                                    onClick = {
-                                        if (!hasAnswered) {
-                                            userAnswers[q.id] = index
-                                            if (index == q.correctIndex) {
-                                                onAwardQuizPoints(q.id, q.pointsValue)
-                                            }
-                                        }
-                                    },
+                                    enabled = !isLocked,
+                                    onClick = { onSelectQuizOption() },
                                     colors = RadioButtonDefaults.colors(
                                         selectedColor = MaterialTheme.colorScheme.primary
                                     )
@@ -1307,7 +1674,8 @@ fun TechQuizTab(
                                 Text(
                                     text = optionText,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (hasAnswered && index == q.correctIndex) Color(0xFF80FFAB) else MaterialTheme.colorScheme.onSurface
+                                    color = if (hasAnswered && index == q.correctIndex && isCorrect) Color(0xFF80FFAB)
+                                    else MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -1317,26 +1685,28 @@ fun TechQuizTab(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(
-                                        if (isCorrect) Color(0xFF13381E) else Color(0xFF470C15)
+                                        if (isCorrect) Color(0xFF13381E) else Color(0xFF2B1B3D)
                                     )
                                     .padding(10.dp)
                             ) {
                                 Column {
                                     Text(
-                                        text = if (isCorrect) (if (isPt) "🎉 Correto! (+${q.pointsValue} XP)" else "🎉 Correct! (+${q.pointsValue} XP)")
-                                        else (if (isPt) "❌ Incorreto." else "❌ Incorrect."),
+                                        text = if (isCorrect) (if (isPt) "🎉 Parabéns! Resposta Correta! (+${q.pointsValue} XP) ✨" else "🎉 Congratulations! Correct! (+${q.pointsValue} XP) ✨")
+                                        else (if (isPt) "💜 Quase lá! Tente novamente clicando em outra opção ✨" else "💜 Almost there! Try again by choosing another option ✨"),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
-                                        color = if (isCorrect) Color(0xFF80FFAB) else Color(0xFFFF94A3)
+                                        color = if (isCorrect) Color(0xFF80FFAB) else Color(0xFFE9D5FF)
                                     )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = q.explanation(language),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color.White
-                                    )
+                                    if (isCorrect) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = q.explanation(language),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.White
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -50,6 +50,26 @@ object TechContentRepository {
         } else {
             "MongoDB is the premier document-oriented NoSQL database. It stores records in flexible BSON (binary JSON), providing native horizontal sharding, indexing, and an expressive aggregation pipeline."
         }
+        Technology.JAVASCRIPT -> if (isPt) {
+            "JavaScript é a linguagem essencial da web moderna, executando no navegador e no servidor (Node.js/Bun). Possui modelo assíncrono baseado em Event Loop, Promises, ES6+ e o maior ecossistema de bibliotecas do mundo (npm)."
+        } else {
+            "JavaScript is the foundational language of the modern web, running in both browsers and servers (Node.js/Bun). It features an event-driven, non-blocking I/O model, Promises, ES6+, and the world's largest package ecosystem (npm)."
+        }
+        Technology.TYPESCRIPT -> if (isPt) {
+            "TypeScript é um superset fortemente tipado de JavaScript desenvolvido pela Microsoft. Adiciona checagem estática de tipos, interfaces, generics, enums e autocomplete avançado, compilando para JavaScript portátil e seguro."
+        } else {
+            "TypeScript is a strongly typed superset of JavaScript developed by Microsoft. It adds static type checking, interfaces, generics, enums, and advanced tooling, compiling down to clean, portable JavaScript."
+        }
+        Technology.KOTLIN -> if (isPt) {
+            "Kotlin é uma linguagem multiplataforma moderna desenvolvida pela JetBrains e recomendada oficialmente pelo Google para Android. Destaca-se por segurança contra nulos (null safety), concisão, coroutines assíncronas e 100% de interoperabilidade com Java."
+        } else {
+            "Kotlin is a modern multiplatform language created by JetBrains and the official preferred choice for Android by Google. Renowned for null safety, conciseness, coroutines for asynchronous concurrency, and 100% Java interoperability."
+        }
+        Technology.GO -> if (isPt) {
+            "Go (Golang) é uma linguagem compilada criada pelo Google focada em simplicidade, altíssima velocidade e concorrência nativa. Com goroutines, channels e binários estáticos, domina infraestrutura cloud (Docker, Kubernetes) e microserviços."
+        } else {
+            "Go (Golang) is a compiled systems & cloud language built at Google emphasizing simplicity, blazing compilation/execution speed, and CSP concurrency via goroutines and channels."
+        }
     }
 
     fun getCheatsheet(tech: Technology): List<CheatsheetItem> = when (tech) {
@@ -193,6 +213,91 @@ object TechContentRepository {
                 codeSnippet = "db.orders.aggregate([\n  { \$match: { status: \"DELIVERED\" } },\n  { \$group: {\n      _id: \"\$customerId\",\n      totalSpent: { \$sum: \"\$amount\" },\n      ordersCount: { \$sum: 1 }\n  }},\n  { \$sort: { totalSpent: -1 } }\n]);",
                 explanationPt = "O Aggregation Framework atua como processamento ETL em memória distribuída do MongoDB.",
                 explanationEn = "The Aggregation Framework executes multi-stage data transformations directly on the database engine."
+            )
+        )
+        Technology.JAVASCRIPT -> listOf(
+            CheatsheetItem(
+                titlePt = "Async / Await e Requisições com Fetch",
+                titleEn = "Async / Await & Fetch Requests",
+                codeSnippet = "async function buscarDev(username) {\n  try {\n    const res = await fetch(`https://api.github.com/users/\${username}`);\n    if (!res.ok) throw new Error(`HTTP \${res.status}`);\n    const data = await res.json();\n    return data;\n  } catch (err) {\n    console.error(\"Falha na requisição:\", err.message);\n  }\n}",
+                explanationPt = "Sintaxe assíncrona idiomática que combina Promises com tratamento estruturado de erros via try/catch.",
+                explanationEn = "Idiomatic asynchronous syntax pairing Promises with structured try/catch error handling."
+            ),
+            CheatsheetItem(
+                titlePt = "Desestruturação e Operador Spread (...)",
+                titleEn = "Destructuring & Spread Operator (...)",
+                codeSnippet = "const dev = { nome: \"Mariana\", stack: \"Frontend\", exp: 3 };\nconst { nome, ...resto } = dev;\n\nconst novoDev = {\n  ...dev,\n  stack: \"Fullstack\",\n  skills: [\"React\", \"Node.js\"]\n};",
+                explanationPt = "Permite extração limpa de propriedades e clonagem/atualização imutável de objetos e arrays.",
+                explanationEn = "Enables clean extraction of properties alongside immutable cloning and merging of objects and arrays."
+            ),
+            CheatsheetItem(
+                titlePt = "Operações Funcionais de Array (.map, .filter, .reduce)",
+                titleEn = "Functional Array Operations (.map, .filter, .reduce)",
+                codeSnippet = "const produtos = [\n  { id: 1, preco: 100, ativo: true },\n  { id: 2, preco: 250, ativo: false },\n  { id: 3, preco: 150, ativo: true }\n];\n\nconst totalAtivos = produtos\n  .filter(p => p.ativo)\n  .map(p => p.preco)\n  .reduce((acc, preco) => acc + preco, 0); // 250",
+                explanationPt = "Encadeamento declarativo para filtrar, mapear e totalizar dados sem loops imperativos.",
+                explanationEn = "Declarative chaining for filtering, mapping, and aggregating records without imperative loops."
+            )
+        )
+        Technology.TYPESCRIPT -> listOf(
+            CheatsheetItem(
+                titlePt = "Interfaces com Generics e Opcionais",
+                titleEn = "Interfaces with Generics & Optionals",
+                codeSnippet = "interface RespostaApi<T> {\n  status: number;\n  sucesso: boolean;\n  dados: T;\n  erro?: string;\n}\n\ninterface PerfilDev {\n  id: string;\n  nome: string;\n  senioridade: \"Junior\" | \"Pleno\" | \"Senior\";\n}\n\ntype RespostaDev = RespostaApi<PerfilDev>;",
+                explanationPt = "Combina contratos de tipos com generics parametrizados e union types estritos para máxima segurança.",
+                explanationEn = "Pairs type contracts with parameterized generics and strict union types for compile-time safety."
+            ),
+            CheatsheetItem(
+                titlePt = "Utility Types (Partial, Pick, Omit, Record)",
+                titleEn = "Utility Types (Partial, Pick, Omit, Record)",
+                codeSnippet = "interface Post {\n  id: number;\n  titulo: string;\n  conteudo: string;\n  curtidas: number;\n}\n\n// Apenas campos para preview\ntype PostPreview = Pick<Post, \"id\" | \"titulo\">;\n\n// Payload para atualização parcial (patch)\ntype PostUpdate = Partial<Omit<Post, \"id\">>;",
+                explanationPt = "Utilitários nativos para derivar e transformar novos tipos de interfaces sem duplicação de código.",
+                explanationEn = "Built-in utilities to transform and derive new types from existing shapes without duplication."
+            ),
+            CheatsheetItem(
+                titlePt = "Type Guards & Afunilamento (Narrowing)",
+                titleEn = "Type Guards & Type Narrowing",
+                codeSnippet = "interface Sucesso { status: \"sucesso\"; dados: string[] }\ninterface Falha { status: \"falha\"; mensagem: string }\ntype Resultado = Sucesso | Falha;\n\nfunction processar(res: Resultado) {\n  if (res.status === \"sucesso\") {\n    console.log(res.dados.length); // TypeScript sabe que é Sucesso!\n  } else {\n    console.error(res.mensagem);\n  }\n}",
+                explanationPt = "Discriminated Unions permitem que o compilador deduza com precisão as propriedades no bloco condicional.",
+                explanationEn = "Discriminated unions enable the TypeScript compiler to precisely narrow branch types within conditionals."
+            )
+        )
+        Technology.KOTLIN -> listOf(
+            CheatsheetItem(
+                titlePt = "Null Safety com Safe Calls (?.) e Elvis (?:)",
+                titleEn = "Null Safety with Safe Calls (?.) & Elvis (?:)",
+                codeSnippet = "val apelido: String? = null\n// Se nulo, usa valor padrão seguro\nval tamanho = apelido?.length ?: 0\n\n// Executa bloco seguro apenas se não for nulo\napelido?.let {\n    println(\"Nome em maiúsculo: \${it.uppercase()}\")\n}",
+                explanationPt = "O sistema de tipos do Kotlin impede NullPointerExceptions garantindo verificações estritas.",
+                explanationEn = "Kotlin's type system prevents NullPointerExceptions through strict compile-time nullability enforcement."
+            ),
+            CheatsheetItem(
+                titlePt = "Data Classes e Copy Imutável",
+                titleEn = "Data Classes & Immutable Copy",
+                codeSnippet = "data class Usuario(\n    val id: Long,\n    val nome: String,\n    val cargo: String = \"Developer\"\n)\n\nval u1 = Usuario(1, \"Carlos\")\n// Cria nova cópia alterando apenas campos necessários\nval u2 = u1.copy(cargo = \"Tech Lead\")",
+                explanationPt = "Gera automaticamente equals(), hashCode(), toString() e copy() para manipulação imutável idiomática.",
+                explanationEn = "Auto-generates equals(), hashCode(), toString(), and copy() enabling clean immutable state updates."
+            ),
+            CheatsheetItem(
+                titlePt = "Coroutines & StateFlow Reativo",
+                titleEn = "Coroutines & Reactive StateFlow",
+                codeSnippet = "class RepositorioViewModel : ViewModel() {\n    private val _dados = MutableStateFlow<List<String>>(emptyList())\n    val dados: StateFlow<List<String>> = _dados.asStateFlow()\n\n    fun carregar() = viewModelScope.launch {\n        val resposta = withContext(Dispatchers.IO) {\n            apiService.buscarItens()\n        }\n        _dados.value = resposta\n    }\n}",
+                explanationPt = "Padrão moderno de concorrência assíncrona leve no Android e backend sem travamento de UI.",
+                explanationEn = "Modern lightweight asynchronous concurrency standard for Android and backend without UI blocking."
+            )
+        )
+        Technology.GO -> listOf(
+            CheatsheetItem(
+                titlePt = "Goroutines, Channels e WaitGroup",
+                titleEn = "Goroutines, Channels & WaitGroup",
+                codeSnippet = "func processar(id int, ch chan<- string, wg *sync.WaitGroup) {\n    defer wg.Done()\n    ch <- fmt.Sprintf(\"Worker %d concluído\", id)\n}\n\nvar wg sync.WaitGroup\nch := make(chan string, 2)\nwg.Add(2)\ngo processar(1, ch, &wg)\ngo processar(2, ch, &wg)\nwg.Wait()\nclose(ch)",
+                explanationPt = "Goroutines executam funções concorrentemente enquanto channels sincronizam mensagens sem mutex manual.",
+                explanationEn = "Goroutines execute functions concurrently while typed channels communicate safely without manual locks."
+            ),
+            CheatsheetItem(
+                titlePt = "Tratamento Explícito de Erros com Wrap (%w)",
+                titleEn = "Explicit Error Handling with %w Wrapping",
+                codeSnippet = "func buscarUsuario(id string) (User, error) {\n    u, err := repo.Find(id)\n    if err != nil {\n        return User{}, fmt.Errorf(\"buscarUsuario(%s): %w\", id, err)\n    }\n    return u, nil\n}",
+                explanationPt = "Go trata erros como valores de retorno explícitos e usa %w para preservar a causa original.",
+                explanationEn = "Go handles errors as explicit return values and uses %w to wrap underlying errors cleanly."
             )
         )
     }
@@ -394,6 +499,134 @@ object TechContentRepository {
                 topicsEn = listOf("Pipeline \$match, \$group, \$sort", "\$project & computed expressions", "\$lookup for multi-collection joins", "\$unwind for array destructuring")
             )
         )
+        Technology.JAVASCRIPT -> listOf(
+            RoadmapStep(
+                stepNumber = 1,
+                titlePt = "Fundamentos do JavaScript & ES6+",
+                titleEn = "JavaScript Fundamentals & ES6+",
+                descPt = "Declarações const/let, arrow functions, template literals, destructuring e manipulação de arrays.",
+                descEn = "const/let declarations, arrow functions, template literals, destructuring, and array operations.",
+                estimatedHours = 8,
+                topicsPt = listOf("Escopo de variáveis e let/const", "Arrow functions e retorno implícito", "Destructuring e Spread (...)", "Métodos de Array (.map, .filter, .reduce)"),
+                topicsEn = listOf("Variable scoping & let/const", "Arrow functions & implicit returns", "Destructuring & Spread (...)", "Array methods (.map, .filter, .reduce)")
+            ),
+            RoadmapStep(
+                stepNumber = 2,
+                titlePt = "JavaScript Assíncrono & Event Loop",
+                titleEn = "Asynchronous JavaScript & Event Loop",
+                descPt = "Entendimento profundo do Event Loop, Callbacks, Promises, async/await e Fetch API.",
+                descEn = "Deep dive into the Event Loop, Callbacks, Promises, async/await, and Fetch API.",
+                estimatedHours = 12,
+                topicsPt = listOf("Event Loop e Microtasks", "Promises e encadeamento .then()", "async/await e try/catch", "Fetch API e integração HTTP"),
+                topicsEn = listOf("Event Loop & Microtasks", "Promises & .then() chaining", "async/await & try/catch", "Fetch API & HTTP integration")
+            ),
+            RoadmapStep(
+                stepNumber = 3,
+                titlePt = "POO Moderna, Módulos & Node.js",
+                titleEn = "Modern OOP, Modules & Node.js",
+                descPt = "Classes ES6, herança com super, módulos ESM e desenvolvimento fullstack com Node.js.",
+                descEn = "ES6 classes, super inheritance, ESM modules, and fullstack backend development with Node.js.",
+                estimatedHours = 14,
+                topicsPt = listOf("Classes ES6 e herança", "Closures e escopo léxico", "Módulos import/export ESM", "Node.js e gerenciamento npm"),
+                topicsEn = listOf("ES6 classes & inheritance", "Closures & lexical scope", "ESM import/export modules", "Node.js & npm ecosystem")
+            )
+        )
+        Technology.TYPESCRIPT -> listOf(
+            RoadmapStep(
+                stepNumber = 1,
+                titlePt = "Tipagem Estática Básica & Interfaces",
+                titleEn = "Static Typing Basics & Interfaces",
+                descPt = "Anotações de tipos primitivos, interfaces de contratos, type aliases e union types.",
+                descEn = "Primitive type annotations, contract interfaces, type aliases, and union types.",
+                estimatedHours = 8,
+                topicsPt = listOf("Tipos primitivos e inferência", "Interfaces e campos opcionais (?)", "Union Types e Type Aliases", "Tipagem de parâmetros de funções"),
+                topicsEn = listOf("Primitive types & inference", "Interfaces & optional fields (?)", "Union Types & Type Aliases", "Function parameter typing")
+            ),
+            RoadmapStep(
+                stepNumber = 2,
+                titlePt = "Generics & Utility Types",
+                titleEn = "Generics & Utility Types",
+                descPt = "Criação de código reutilizável com generics, restrições com extends e utility types do TypeScript.",
+                descEn = "Reusable code with generics, extends constraints, and built-in TypeScript utility types.",
+                estimatedHours = 12,
+                topicsPt = listOf("Funções genéricas <T>", "Generic constraints (T extends)", "Partial, Pick, Omit, Record", "Type Assertions (as)"),
+                topicsEn = listOf("Generic functions <T>", "Generic constraints (T extends)", "Partial, Pick, Omit, Record", "Type Assertions (as)")
+            ),
+            RoadmapStep(
+                stepNumber = 3,
+                titlePt = "Tipos Avançados & Configuração de Projetos",
+                titleEn = "Advanced Types & Project Configuration",
+                descPt = "Type guards com predicates, mapped types, conditional types e configuração tsconfig.json.",
+                descEn = "Custom type predicates, mapped types, conditional types, and tsconfig.json configuration.",
+                estimatedHours = 14,
+                topicsPt = listOf("Type Predicates (val is Type)", "Conditional Types (T extends U ? X : Y)", "Mapped Types ([K in keyof T])", "Configurações estritas no tsconfig.json"),
+                topicsEn = listOf("Type Predicates (val is Type)", "Conditional Types (T extends U ? X : Y)", "Mapped Types ([K in keyof T])", "Strict tsconfig.json configurations")
+            )
+        )
+        Technology.KOTLIN -> listOf(
+            RoadmapStep(
+                stepNumber = 1,
+                titlePt = "Fundamentos do Kotlin & Null Safety",
+                titleEn = "Kotlin Fundamentals & Null Safety",
+                descPt = "val vs var, interpolação de strings, sistema de tipos anuláveis, safe call e expressão when.",
+                descEn = "val vs var, string templates, nullable type system, safe call, and when expressions.",
+                estimatedHours = 8,
+                topicsPt = listOf("val (imutável) e var (mutável)", "Null Safety (?., ?:, !!.)", "Expressão when exaustiva", "Valores padrão em funções"),
+                topicsEn = listOf("val (immutable) vs var (mutable)", "Null Safety (?., ?:, !!.)", "Exhaustive when expressions", "Default function arguments")
+            ),
+            RoadmapStep(
+                stepNumber = 2,
+                titlePt = "POO Idiomática & Funções de Escopo",
+                titleEn = "Idiomatic OOP & Scope Functions",
+                descPt = "Data classes, extension functions, coleções funcionais (map, filter) e funções de escopo (let, apply).",
+                descEn = "Data classes, extension functions, functional collections (map, filter), and scope functions (let, apply).",
+                estimatedHours = 12,
+                topicsPt = listOf("Data classes e método copy()", "Extension functions", "Funções de escopo (let, apply, run)", "Operações em coleções e groupBy"),
+                topicsEn = listOf("Data classes & copy() method", "Extension functions", "Scope functions (let, apply, run)", "Collection operations & groupBy")
+            ),
+            RoadmapStep(
+                stepNumber = 3,
+                titlePt = "Coroutines, StateFlow & Jetpack Compose",
+                titleEn = "Coroutines, StateFlow & Jetpack Compose",
+                descPt = "Concorrência estruturada com coroutines, Dispatchers, StateFlow reativo e UI moderna em Compose.",
+                descEn = "Structured concurrency with coroutines, Dispatchers, reactive StateFlow, and modern Compose UI.",
+                estimatedHours = 16,
+                topicsPt = listOf("Coroutines e Dispatchers.IO/Main", "withContext, async e await", "Flow e StateFlow reativo", "Integração com ViewModel e Jetpack Compose"),
+                topicsEn = listOf("Coroutines & Dispatchers.IO/Main", "withContext, async & await", "Flow & reactive StateFlow", "ViewModel & Jetpack Compose integration")
+            )
+        )
+        Technology.GO -> listOf(
+            RoadmapStep(
+                stepNumber = 1,
+                titlePt = "Sintaxe Essencial, Slices & Structs",
+                titleEn = "Core Syntax, Slices & Structs",
+                descPt = "Declaração curta :=, slices dinâmicos, maps, structs e retorno múltiplo.",
+                descEn = "Short declarations :=, dynamic slices, maps, structs, and multiple returns.",
+                estimatedHours = 8,
+                topicsPt = listOf("Operador := e tipos básicos", "Slices e make/append", "Structs e Pointer Receivers (*T)", "Tratamento de erro (if err != nil)"),
+                topicsEn = listOf(":= operator & primitives", "Slices & make/append", "Structs & Pointer Receivers (*T)", "Error handling (if err != nil)")
+            ),
+            RoadmapStep(
+                stepNumber = 2,
+                titlePt = "Interfaces, Pacotes & APIs Web",
+                titleEn = "Interfaces, Packages & Web APIs",
+                descPt = "Polimorfismo implícito, encoding/json, net/http e módulos go.mod.",
+                descEn = "Implicit interface satisfaction, encoding/json, net/http, and go.mod modules.",
+                estimatedHours = 12,
+                topicsPt = listOf("Interfaces implícitas", "Struct tags & JSON Marshaling", "Servidores net/http", "defer e errors.Is/As"),
+                topicsEn = listOf("Implicit interfaces", "Struct tags & JSON Marshaling", "net/http servers", "defer & errors.Is/As")
+            ),
+            RoadmapStep(
+                stepNumber = 3,
+                titlePt = "Concorrência com Goroutines, Channels & Context",
+                titleEn = "Concurrency with Goroutines, Channels & Context",
+                descPt = "Goroutines, channels buffered/unbuffered, select, Mutex, WaitGroup e context timeouts.",
+                descEn = "Goroutines, buffered/unbuffered channels, select, Mutex, WaitGroup, and context deadlines.",
+                estimatedHours = 14,
+                topicsPt = listOf("Goroutines e sync.WaitGroup", "Channels e multiplexação select", "context.WithTimeout e cancelamento", "Worker Pools e testes nativos"),
+                topicsEn = listOf("Goroutines & sync.WaitGroup", "Channels & select multiplexing", "context.WithTimeout & cancellation", "Worker Pools & native testing")
+            )
+        )
     }
 
     fun getQuizQuestions(tech: Technology): List<QuizQuestion> = when (tech) {
@@ -531,6 +764,132 @@ object TechContentRepository {
                 correctIndex = 0,
                 explanationPt = "O estágio \$match filtra os documentos no início do pipeline, similar ao WHERE no SQL.",
                 explanationEn = "The \$match stage filters documents before passing them to downstream stages, matching SQL's WHERE."
+            )
+        )
+        Technology.JAVASCRIPT -> listOf(
+            QuizQuestion(
+                id = 901,
+                tech = Technology.JAVASCRIPT,
+                questionPt = "Qual é o resultado da expressão 'typeof NaN' em JavaScript?",
+                questionEn = "What is the result of 'typeof NaN' in JavaScript?",
+                optionsPt = listOf("\"number\"", "\"NaN\"", "\"undefined\"", "\"object\""),
+                optionsEn = listOf("\"number\"", "\"NaN\"", "\"undefined\"", "\"object\""),
+                correctIndex = 0,
+                explanationPt = "Apesar de significar 'Not-a-Number', a especificação ECMAScript define NaN como um valor numérico especial (tipo 'number').",
+                explanationEn = "Even though it stands for 'Not-a-Number', IEEE 754 and ECMAScript classify NaN as a numeric value."
+            ),
+            QuizQuestion(
+                id = 902,
+                tech = Technology.JAVASCRIPT,
+                questionPt = "Qual método resolve múltiplas Promises em paralelo e retorna um array com todos os resultados resolvidos?",
+                questionEn = "Which method executes multiple Promises concurrently and returns an array with all resolved results?",
+                optionsPt = listOf("Promise.all()", "Promise.race()", "Promise.wait()", "Promise.sync()"),
+                optionsEn = listOf("Promise.all()", "Promise.race()", "Promise.wait()", "Promise.sync()"),
+                correctIndex = 0,
+                explanationPt = "Promise.all() aguarda a resolução de todas as promises em paralelo e falha imediatamente se qualquer uma for rejeitada.",
+                explanationEn = "Promise.all() aggregates concurrent promises, fulfilling with an array of values when all succeed."
+            )
+        )
+        Technology.TYPESCRIPT -> listOf(
+            QuizQuestion(
+                id = 1001,
+                tech = Technology.TYPESCRIPT,
+                questionPt = "Qual utility type em TypeScript transforma todas as propriedades de uma interface em campos opcionais?",
+                questionEn = "Which TypeScript utility type transforms all interface properties into optional fields?",
+                optionsPt = listOf("Partial<T>", "Required<T>", "Readonly<T>", "Optional<T>"),
+                optionsEn = listOf("Partial<T>", "Required<T>", "Readonly<T>", "Optional<T>"),
+                correctIndex = 0,
+                explanationPt = "Partial<T> percorre todas as propriedades de T e adiciona o modificador de opcional (?).",
+                explanationEn = "Partial<T> iterates over all properties of T adding the optional modifier (?)."
+            ),
+            QuizQuestion(
+                id = 1002,
+                tech = Technology.TYPESCRIPT,
+                questionPt = "Qual palavra-chave é usada para restringir os tipos permitidos em um parâmetro genérico <T>?",
+                questionEn = "Which keyword is used to constrain allowed types in a generic parameter <T>?",
+                optionsPt = listOf("extends", "implements", "where", "with"),
+                optionsEn = listOf("extends", "implements", "where", "with"),
+                correctIndex = 0,
+                explanationPt = "A cláusula 'extends' em generics impõe que o tipo genérico deva herdar ou possuir o formato do tipo especificado.",
+                explanationEn = "The 'extends' generic constraint ensures that the type argument inherits from or satisfies the given shape."
+            )
+        )
+        Technology.KOTLIN -> listOf(
+            QuizQuestion(
+                id = 1101,
+                tech = Technology.KOTLIN,
+                questionPt = "Em Kotlin, como o operador Elvis (?:) funciona na expressão 'val x = a ?: b'?",
+                questionEn = "In Kotlin, how does the Elvis operator (?:) evaluate 'val x = a ?: b'?",
+                optionsPt = listOf(
+                    "Retorna 'a' se não for nulo; caso contrário retorna 'b'.",
+                    "Retorna sempre 'b'.",
+                    "Executa uma comparação ternária booleana.",
+                    "Lança NullPointerException se 'a' for nulo."
+                ),
+                optionsEn = listOf(
+                    "Returns 'a' if not null; otherwise returns 'b'.",
+                    "Always returns 'b'.",
+                    "Executes a boolean ternary comparison.",
+                    "Throws NullPointerException if 'a' is null."
+                ),
+                correctIndex = 0,
+                explanationPt = "O operador Elvis (?:) avalia o lado esquerdo; se não for nulo o utiliza, senão executa o lado direito como fallback.",
+                explanationEn = "The Elvis operator (?:) yields the left expression if non-null, evaluating the right operand as a fallback."
+            ),
+            QuizQuestion(
+                id = 1102,
+                tech = Technology.KOTLIN,
+                questionPt = "Qual recurso em Kotlin permite adicionar novos métodos a uma classe existente sem herança ou modificação de código fonte?",
+                questionEn = "Which Kotlin feature allows adding new methods to an existing class without inheritance or source modification?",
+                optionsPt = listOf(
+                    "Extension Functions (fun Tipo.metodo())",
+                    "Modificador 'open'",
+                    "Override de construtor",
+                    "Companion Objects dinâmicos"
+                ),
+                optionsEn = listOf(
+                    "Extension Functions (fun Type.method())",
+                    "Modifier 'open'",
+                    "Constructor override",
+                    "Dynamic companion objects"
+                ),
+                correctIndex = 0,
+                explanationPt = "Extension functions estendem classes pré-existentes resolvendo chamadas estaticamente pelo compilador.",
+                explanationEn = "Extension functions extend classes with new methods resolved statically by the compiler."
+            )
+        )
+        Technology.GO -> listOf(
+            QuizQuestion(
+                id = 1201,
+                tech = Technology.GO,
+                questionPt = "Qual instrução agenda a execução de uma chamada (como fechar um arquivo) imediatamente antes da função retornar?",
+                questionEn = "Which statement schedules a call (such as closing a file) to run right before the enclosing function returns?",
+                optionsPt = listOf("defer", "finally", "atexit", "post"),
+                optionsEn = listOf("defer", "finally", "atexit", "post"),
+                correctIndex = 0,
+                explanationPt = "A instrução 'defer' adia a execução da chamada até o retorno da função envolvente, garantindo limpeza segura.",
+                explanationEn = "The 'defer' statement defers execution until the surrounding function returns, ensuring cleanup."
+            ),
+            QuizQuestion(
+                id = 1202,
+                tech = Technology.GO,
+                questionPt = "Como uma struct satisfaz uma interface na linguagem Go?",
+                questionEn = "How does a struct satisfy an interface in Go?",
+                optionsPt = listOf(
+                    "Implicitamente, bastando implementar todos os métodos definidos pela interface.",
+                    "Usando a palavra-chave 'implements' na declaração da struct.",
+                    "Registrando em um arquivo go.interfaces.",
+                    "Herdando de interfaceBase com 'extends'."
+                ),
+                optionsEn = listOf(
+                    "Implicitly, simply by implementing all methods declared in the interface.",
+                    "Using the 'implements' keyword on the struct.",
+                    "Registering in a go.interfaces manifest.",
+                    "Extending a base interface with 'extends'."
+                ),
+                correctIndex = 0,
+                explanationPt = "Go utiliza tipagem estrutural implícita (duck typing estático): não existe palavra-chave 'implements'.",
+                explanationEn = "Go uses implicit structural typing for interfaces without any explicit 'implements' keyword."
             )
         )
     }

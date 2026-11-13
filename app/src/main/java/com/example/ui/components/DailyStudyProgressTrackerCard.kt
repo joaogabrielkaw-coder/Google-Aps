@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
@@ -41,7 +40,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,17 +55,28 @@ import androidx.compose.ui.unit.sp
 import com.example.data.repository.LanguageDailyProgress
 import com.example.model.Language
 import com.example.model.Technology
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.PurplePrimaryLight
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
 import com.example.ui.theme.TechCssColor
+import com.example.ui.theme.TechGoColor
 import com.example.ui.theme.TechHtmlColor
 import com.example.ui.theme.TechJavaColor
+import com.example.ui.theme.TechJsColor
+import com.example.ui.theme.TechKotlinColor
 import com.example.ui.theme.TechMongoColor
 import com.example.ui.theme.TechMySqlColor
 import com.example.ui.theme.TechPostgresColor
 import com.example.ui.theme.TechPythonColor
 import com.example.ui.theme.TechSqlColor
+import com.example.ui.theme.TechTsColor
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val PurplePrimaryLight: Color
+    @Composable get() = LocalDevRoutineColors.current.primaryLight
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 fun getTechnologyColor(tech: Technology): Color {
     return when (tech) {
@@ -79,6 +88,10 @@ fun getTechnologyColor(tech: Technology): Color {
         Technology.MYSQL -> TechMySqlColor
         Technology.POSTGRESQL -> TechPostgresColor
         Technology.MONGODB -> TechMongoColor
+        Technology.JAVASCRIPT -> TechJsColor
+        Technology.TYPESCRIPT -> TechTsColor
+        Technology.KOTLIN -> TechKotlinColor
+        Technology.GO -> TechGoColor
     }
 }
 
@@ -89,7 +102,6 @@ fun DailyStudyProgressTrackerCard(
     onSelectTech: (Technology) -> Unit,
     todayProgressMap: Map<String, LanguageDailyProgress>,
     isLoggedIn: Boolean,
-    onLogQuickSession: (tech: Technology, minutes: Int, xp: Int) -> Unit,
     onOpenTechDetail: (Technology) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -203,7 +215,7 @@ fun DailyStudyProgressTrackerCard(
             // Horizontal Technology Selector Chips
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = if (isPt) "Selecione a linguagem para registrar ou visualizar:" else "Select language to log or view:",
+                    text = if (isPt) "Selecione a linguagem para acompanhar seu progresso:" else "Select a language to track your progress:",
                     style = MaterialTheme.typography.labelMedium.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
@@ -405,66 +417,38 @@ fun DailyStudyProgressTrackerCard(
                         )
                     }
 
-                    // Action Buttons: Quick Log Session & Practice Challenges
+                    // Tempo automático + botão para praticar desafios (consumindo vidas reais)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // +15 min button
-                        OutlinedButton(
-                            onClick = { onLogQuickSession(selectedTech, 15, 15) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(40.dp)
-                                .testTag("btn_log_15min_${selectedTech.id}"),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(
-                                text = "+15 min",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
-                            )
-                        }
+                        Text(
+                            text = if (isPt) "⏱️ Tempo contabilizado automaticamente pelo uso real no app." else "⏱️ Time counted automatically from real app usage.",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.5.sp
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
 
-                        // +30 min button
-                        OutlinedButton(
-                            onClick = { onLogQuickSession(selectedTech, 30, 30) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(40.dp)
-                                .testTag("btn_log_30min_${selectedTech.id}"),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Text(
-                                text = "+30 min",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
-                            )
-                        }
-
-                        // Go to challenges button
                         Button(
                             onClick = { onOpenTechDetail(selectedTech) },
                             modifier = Modifier
-                                .weight(1.3f)
                                 .height(40.dp)
                                 .testTag("btn_practice_${selectedTech.id}"),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = techColor),
-                            contentPadding = PaddingValues(horizontal = 6.dp)
+                            contentPadding = PaddingValues(horizontal = 14.dp)
                         ) {
                             Text(
                                 text = if (isPt) "Praticar" else "Practice",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
-                                    fontSize = 11.5.sp
+                                    fontSize = 12.sp
                                 )
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -486,7 +470,8 @@ fun DailyStudyProgressTrackerCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isPt) "Linguagens praticadas hoje: $studiedCount de 8" else "Languages practiced today: $studiedCount of 8",
+                    text = if (isPt) "Linguagens praticadas hoje: $studiedCount de ${Technology.entries.size}"
+                    else "Languages practiced today: $studiedCount of ${Technology.entries.size}",
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp

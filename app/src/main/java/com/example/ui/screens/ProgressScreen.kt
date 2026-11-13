@@ -25,11 +25,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -37,6 +41,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,13 +67,22 @@ import com.example.model.ActivityDifficulty
 import com.example.model.Language
 import com.example.model.Technology
 import com.example.model.UserScoreInfo
+import com.example.ui.components.LevelRoadmapDialog
 import com.example.ui.components.UserBadgesSection
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-
+import com.example.data.repository.DailyLanguageChallengeSummary
 import com.example.data.repository.LanguageDailyProgress
+import com.example.ui.DailyScreenTimeManager
+import com.example.ui.DailyStudyGoalState
+import com.example.ui.components.WeeklyChallengesDashboardCard
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 @Composable
 fun ProgressScreen(
@@ -76,12 +90,24 @@ fun ProgressScreen(
     scoreInfo: UserScoreInfo,
     badges: List<UserBadgeEntity> = emptyList(),
     todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
+    weeklyChallengeHistory: List<DailyLanguageChallengeSummary> = emptyList(),
+    dailyStudyGoalState: DailyStudyGoalState = DailyStudyGoalState(),
     getTechScore: (Technology) -> Int,
-    onOpenTechDetail: (Technology) -> Unit
+    onOpenTechDetail: (Technology) -> Unit,
+    onOpenWeeklyAiSummary: () -> Unit = {}
 ) {
     val isPt = language == Language.PT
     var selectedTimeframe by remember { mutableIntStateOf(0) } // 0 = 7 days, 1 = 30 days, 2 = All
+    var showLevelRoadmapDialog by remember { mutableStateOf(false) }
     val timeframes = if (isPt) listOf("Últimos 7 Dias", "30 Dias", "Geral") else listOf("Last 7 Days", "30 Days", "Overall")
+
+    if (showLevelRoadmapDialog) {
+        LevelRoadmapDialog(
+            scoreInfo = scoreInfo,
+            language = language,
+            onDismiss = { showLevelRoadmapDialog = false }
+        )
+    }
 
     // Historical data points simulated based on user's current score
     val currentTotal = scoreInfo.totalScore
@@ -150,6 +176,269 @@ fun ProgressScreen(
                     }
                 }
             }
+        }
+
+        // 0a. Live Activity-Based Screen-Time Daily Goal Card
+        item {
+            val languageMinutesToday = todayProgressMap.values.sumOf { it.minutesStudied }
+            val effectiveSeconds = maxOf(dailyStudyGoalState.activeSecondsToday, languageMinutesToday * 60)
+            val goalSeconds = DailyScreenTimeManager.DAILY_GOAL_SECONDS
+            val fraction = (effectiveSeconds.toFloat() / goalSeconds).coerceIn(0f, 1f)
+            val percent = ((effectiveSeconds.toFloat() / goalSeconds) * 100f).toInt().coerceIn(0, 100)
+            val formattedActive = DailyScreenTimeManager.formatDurationMmSs(effectiveSeconds)
+            val formattedGoal = DailyScreenTimeManager.formatDurationMmSs(goalSeconds)
+            val statusColor = if (dailyStudyGoalState.isTimerRunning) Color(0xFF4CAF50) else Color(0xFFFFB300)
+
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Brush.horizontalGradient(listOf(PurplePrimary.copy(alpha = 0.65f), RedAccent.copy(alpha = 0.65f)))
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_progress_screen_time_goal")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(PurplePrimary.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Timer,
+                                    contentDescription = null,
+                                    tint = PurplePrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (isPt) "⏱️ Meta Diária por Tempo de Tela" else "⏱️ Screen-Time Daily Goal",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = if (isPt) "Contabilizado automaticamente pela atividade real" else "Auto-calculated from real user activity",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = statusColor.copy(alpha = 0.16f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(statusColor)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (dailyStudyGoalState.isTimerRunning) {
+                                        if (isPt) "Ativo" else "Live"
+                                    } else {
+                                        if (isPt) "Pausado" else "Idle"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = statusColor
+                                )
+                            }
+                        }
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = if (percent >= 100) Color(0xFF4CAF50) else PurplePrimary,
+                        trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isPt) "Hoje: $formattedActive / $formattedGoal ($percent%)"
+                            else "Today: $formattedActive / $formattedGoal ($percent%)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = if (isPt) "Acumulado: ${maxOf(dailyStudyGoalState.totalActiveMinutes, effectiveSeconds / 60)} min"
+                            else "Total: ${maxOf(dailyStudyGoalState.totalActiveMinutes, effectiveSeconds / 60)} min",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        // 0b. Level, Rank & Life-Reset Progression Card
+        item {
+            val rankLabel = if (isPt) scoreInfo.rankBadgePt else scoreInfo.rankBadgeEn
+            val levelTitle = if (isPt) scoreInfo.levelTitlePt else scoreInfo.levelTitleEn
+            val remainingXp = (scoreInfo.nextLevelTarget - scoreInfo.totalScore).coerceAtLeast(0)
+
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Brush.horizontalGradient(listOf(Color(0xFFFFD54F).copy(alpha = 0.6f), PurplePrimary.copy(alpha = 0.7f)))
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showLevelRoadmapDialog = true }
+                    .testTag("btn_progress_level_roadmap")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(PurplePrimary.copy(alpha = 0.22f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.WorkspacePremium,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFD54F),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = if (isPt) "Nvl ${scoreInfo.levelNumber} • $levelTitle" else "Lv ${scoreInfo.levelNumber} • $levelTitle",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                                )
+                                Text(
+                                    text = if (scoreInfo.isMaxLevel) {
+                                        if (isPt) "Nível Máximo Alcançado (${scoreInfo.totalScore} XP)"
+                                        else "Max Level Reached (${scoreInfo.totalScore} XP)"
+                                    } else {
+                                        if (isPt) "Faltam $remainingXp XP para o Nível ${scoreInfo.levelNumber + 1}"
+                                        else "$remainingXp XP left for Level ${scoreInfo.levelNumber + 1}"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFFD54F).copy(alpha = 0.18f)
+                        ) {
+                            Text(
+                                text = rankLabel,
+                                color = Color(0xFFFFD54F),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    LinearProgressIndicator(
+                        progress = { scoreInfo.progressFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = Color(0xFFFFD54F),
+                        trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = Color(0xFFFF4D6D),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isPt) "Subir de nível restaura 25 vidas"
+                                else "Level-up restores 25 lives",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color(0xFFFF8FA3)
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isPt) "Ver 12 Níveis" else "All 12 Ranks",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = PurplePrimary
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = if (isPt) "Abrir roadmap de níveis" else "Open level roadmap",
+                                tint = PurplePrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 0. 7-Day Weekly Challenges Completed Per Language Dashboard
+        item {
+            WeeklyChallengesDashboardCard(
+                weeklyHistory = weeklyChallengeHistory,
+                language = language,
+                onOpenTech = onOpenTechDetail,
+                onOpenAiSummary = onOpenWeeklyAiSummary
+            )
         }
 
         // 1. Line/Area Evolution Chart
@@ -389,11 +678,13 @@ fun ProgressScreen(
             }
         }
 
-        // 4. Room Badges & Achievements Section (Streaks, Python Master, Night Owl, etc.)
+        // 4. Room Badges & Achievements Section (Streaks, Daily Language Seals, Python Master, etc.)
         item {
             UserBadgesSection(
                 badges = badges,
                 language = language,
+                todayProgressMap = todayProgressMap,
+                onOpenTech = onOpenTechDetail,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -423,6 +714,8 @@ fun ScoreOverTimeLineChart(
                 .background(Color(0xFF13101C))
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
+            val canvasPrimary = PurplePrimary
+            val canvasAccent = RedAccent
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -489,8 +782,8 @@ fun ScoreOverTimeLineChart(
                         path = fillPath,
                         brush = Brush.verticalGradient(
                             colors = listOf(
-                                RedAccent.copy(alpha = 0.35f),
-                                PurplePrimary.copy(alpha = 0.15f),
+                                canvasAccent.copy(alpha = 0.35f),
+                                canvasPrimary.copy(alpha = 0.15f),
                                 Color.Transparent
                             )
                         )
@@ -500,7 +793,7 @@ fun ScoreOverTimeLineChart(
                     drawPath(
                         path = linePath,
                         brush = Brush.horizontalGradient(
-                            colors = listOf(PurplePrimary, RedAccent)
+                            colors = listOf(canvasPrimary, canvasAccent)
                         ),
                         style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
                     )
@@ -512,7 +805,7 @@ fun ScoreOverTimeLineChart(
                         val isHighlighted = selectedIndex == index || (selectedIndex == null && index == dataPoints.size - 1)
 
                         drawCircle(
-                            color = if (isHighlighted) RedAccent else PurplePrimary,
+                            color = if (isHighlighted) canvasAccent else canvasPrimary,
                             radius = if (isHighlighted) 6.dp.toPx() else 4.dp.toPx(),
                             center = Offset(x, y)
                         )

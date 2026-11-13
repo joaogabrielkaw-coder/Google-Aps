@@ -12,7 +12,6 @@ service cloud.firestore {
 
     function isValidUserProfile(data) {
       return data.userId is string &&
-             data.userId == request.auth.uid &&
              data.displayName is string &&
              data.displayName.size() > 0 &&
              data.displayName.size() <= 100 &&
@@ -22,7 +21,6 @@ service cloud.firestore {
 
     function isValidLeaderboardEntry(data) {
       return data.userId is string &&
-             data.userId == request.auth.uid &&
              data.displayName is string &&
              data.displayName.size() > 0 &&
              data.displayName.size() <= 100 &&
@@ -32,20 +30,21 @@ service cloud.firestore {
 
     // Private User Profile
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow read: if isOwner(userId) || (request.auth == null && userId.size() > 0);
+      allow create, update: if (isOwner(userId) || (request.auth == null && userId.size() > 0)) && isValidUserProfile(request.resource.data);
       allow delete: if isOwner(userId);
 
       match /daily_progress/{progressId} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if isOwner(userId) || (request.auth == null && userId.size() > 0);
       }
     }
 
     // Public Dev Scoreboard / Leaderboard
     match /leaderboard/{userId} {
       allow read: if true;
-      allow create, update: if isOwner(userId) && isValidLeaderboardEntry(request.resource.data);
+      allow create, update: if (isOwner(userId) || (request.auth == null && userId.size() > 0)) && isValidLeaderboardEntry(request.resource.data);
       allow delete: if isOwner(userId);
     }
   }
 }
+

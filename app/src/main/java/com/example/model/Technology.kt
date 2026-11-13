@@ -10,13 +10,17 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.ui.theme.TechCssColor
+import com.example.ui.theme.TechGoColor
 import com.example.ui.theme.TechHtmlColor
 import com.example.ui.theme.TechJavaColor
+import com.example.ui.theme.TechJsColor
+import com.example.ui.theme.TechKotlinColor
 import com.example.ui.theme.TechMongoColor
 import com.example.ui.theme.TechMySqlColor
 import com.example.ui.theme.TechPostgresColor
 import com.example.ui.theme.TechPythonColor
 import com.example.ui.theme.TechSqlColor
+import com.example.ui.theme.TechTsColor
 
 enum class Technology(
     val id: String,
@@ -116,6 +120,50 @@ enum class Technology(
         badge = "NoSQL / BSON",
         accentColor = TechMongoColor,
         icon = Icons.Default.Dataset
+    ),
+    JAVASCRIPT(
+        id = "javascript",
+        displayName = "JavaScript",
+        categoryPt = "Linguagem Web & Fullstack",
+        categoryEn = "Web & Fullstack Language",
+        shortDescPt = "A linguagem da web: DOM, ES6+, Promises, async/await, APIs e Node.js.",
+        shortDescEn = "The dynamic language of the web: DOM, ES6+, Promises, async/await, APIs & Node.js.",
+        badge = "Web & Fullstack",
+        accentColor = TechJsColor,
+        icon = Icons.Default.Code
+    ),
+    TYPESCRIPT(
+        id = "typescript",
+        displayName = "TypeScript",
+        categoryPt = "Superset Tipado",
+        categoryEn = "Typed Superset",
+        shortDescPt = "JavaScript escalável com tipagem estática, interfaces, generics e alta segurança.",
+        shortDescEn = "Scalable JavaScript with static types, interfaces, generics, and tooling.",
+        badge = "Type Safe",
+        accentColor = TechTsColor,
+        icon = Icons.Default.DataObject
+    ),
+    KOTLIN(
+        id = "kotlin",
+        displayName = "Kotlin",
+        categoryPt = "Linguagem Multiplataforma",
+        categoryEn = "Multiplatform Language",
+        shortDescPt = "Moderna, concisa, segura contra nulos, coroutines e padrão oficial Android e backend.",
+        shortDescEn = "Modern, concise, null-safe language with coroutines for Android, backend & multiplatform.",
+        badge = "Android & Multi",
+        accentColor = TechKotlinColor,
+        icon = Icons.Default.Terminal
+    ),
+    GO(
+        id = "go",
+        displayName = "Go",
+        categoryPt = "Backend & Cloud",
+        categoryEn = "Backend & Cloud",
+        shortDescPt = "Linguagem compilada de alta performance com goroutines, channels e infraestrutura cloud.",
+        shortDescEn = "High-performance compiled language with goroutines, channels, and cloud-native tooling.",
+        badge = "Cloud & Go",
+        accentColor = TechGoColor,
+        icon = Icons.Default.Terminal
     );
 
     companion object {

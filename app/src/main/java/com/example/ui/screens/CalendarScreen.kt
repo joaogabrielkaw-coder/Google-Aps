@@ -63,13 +63,18 @@ import androidx.compose.ui.unit.sp
 import com.example.model.Language
 import com.example.model.StudySession
 import com.example.model.Technology
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 @Composable
 fun CalendarScreen(

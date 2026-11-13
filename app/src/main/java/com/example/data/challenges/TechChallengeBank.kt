@@ -17,10 +17,14 @@ object TechChallengeBank {
         Technology.MYSQL -> MySqlChallenges.list
         Technology.POSTGRESQL -> PostgreSqlChallenges.list
         Technology.MONGODB -> MongoDbChallenges.list
+        Technology.JAVASCRIPT -> JavaScriptChallenges.list
+        Technology.TYPESCRIPT -> TypeScriptChallenges.list
+        Technology.KOTLIN -> KotlinChallenges.list
+        Technology.GO -> GoChallenges.list
     }
 
     /**
-     * Retorna o total de desafios disponíveis em todo o aplicativo (840 desafios).
+     * Retorna o total de desafios disponíveis em todo o aplicativo.
      */
     fun getTotalChallengesCount(): Int = Technology.entries.sumOf { getChallenges(it).size }
 }

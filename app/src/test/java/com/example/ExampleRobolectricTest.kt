@@ -14,7 +14,7 @@ class ExampleRobolectricTest {
     @Test
     fun `technologies enum contains all required tracks`() {
         val tracks = Technology.entries.map { it.id }
-        assertEquals(8, tracks.size)
+        assertEquals(12, tracks.size)
         assertTrue(tracks.contains("python"))
         assertTrue(tracks.contains("sql"))
         assertTrue(tracks.contains("html"))
@@ -23,6 +23,10 @@ class ExampleRobolectricTest {
         assertTrue(tracks.contains("mysql"))
         assertTrue(tracks.contains("postgresql"))
         assertTrue(tracks.contains("mongodb"))
+        assertTrue(tracks.contains("javascript"))
+        assertTrue(tracks.contains("typescript"))
+        assertTrue(tracks.contains("kotlin"))
+        assertTrue(tracks.contains("go"))
     }
 
     @Test

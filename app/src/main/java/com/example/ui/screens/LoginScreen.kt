@@ -84,11 +84,7 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
 import com.example.model.Language
-import com.example.ui.theme.PurpleContainerDark
-import com.example.ui.theme.PurpleDarkBg
-import com.example.ui.theme.PurplePrimary
-import com.example.ui.theme.PurplePrimaryLight
-import com.example.ui.theme.RedAccent
+import com.example.ui.theme.LocalDevRoutineColors
 import com.example.ui.theme.TechCssColor
 import com.example.ui.theme.TechJavaColor
 import com.example.ui.theme.TechMongoColor
@@ -98,6 +94,21 @@ import com.example.ui.theme.TechSqlColor
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
+
+private val PurpleContainerDark: Color
+    @Composable get() = LocalDevRoutineColors.current.containerDark
+
+private val PurpleDarkBg: Color
+    @Composable get() = LocalDevRoutineColors.current.darkBg
+
+private val PurplePrimary: Color
+    @Composable get() = LocalDevRoutineColors.current.primary
+
+private val PurplePrimaryLight: Color
+    @Composable get() = LocalDevRoutineColors.current.primaryLight
+
+private val RedAccent: Color
+    @Composable get() = LocalDevRoutineColors.current.accent
 
 private const val TAG = "LoginScreen"
 

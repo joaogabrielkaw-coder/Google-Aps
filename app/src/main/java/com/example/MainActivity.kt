@@ -20,12 +20,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,13 +49,18 @@ import com.example.ui.components.AppBottomNav
 import com.example.ui.components.AppTopBar
 import com.example.ui.components.AuthLoginDialog
 import com.example.ui.components.BadgeDetailDialog
+import com.example.ui.components.InitialAssessmentDialog
+import com.example.ui.components.ProfilePhotoDialog
+import com.example.ui.components.WeeklyStudySummaryModal
 import com.example.ui.screens.AiChatScreen
 import com.example.ui.screens.CalendarScreen
+import com.example.ui.screens.GameAndScene3DScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LeaderboardScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.ProgressScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.SqlDatabaseScreen
 import com.example.ui.screens.TechDetailScreen
 import com.example.ui.screens.TechHubScreen
 import com.example.ui.theme.DevRoutineTheme
@@ -72,6 +83,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themePreference by viewModel.themePreference.collectAsState()
+            val themeCustomization by viewModel.themeCustomization.collectAsState()
+            val accessibilitySettings by viewModel.accessibilitySettings.collectAsState()
             val language by viewModel.language.collectAsState()
 
             val isDarkTheme = when (themePreference) {
@@ -80,7 +93,11 @@ class MainActivity : ComponentActivity() {
                 ThemePreference.SYSTEM -> isSystemInDarkTheme()
             }
 
-            DevRoutineTheme(darkTheme = isDarkTheme) {
+            DevRoutineTheme(
+                darkTheme = isDarkTheme,
+                customization = themeCustomization,
+                accessibilitySettings = accessibilitySettings
+            ) {
                 MainAppContainer(
                     viewModel = viewModel,
                     isDarkTheme = isDarkTheme,
@@ -121,8 +138,58 @@ fun MainAppContainer(
     val leaderboardEntries by viewModel.leaderboardEntries.collectAsState()
     val trackerSelectedTech by viewModel.trackerSelectedTech.collectAsState()
     val todayProgressMap by viewModel.todayLanguageProgressMap.collectAsState()
+    val weeklyChallengeHistory by viewModel.weeklyChallengeHistory.collectAsState()
+    val dailyLives by viewModel.dailyLives.collectAsState()
+    val todayScreenTimeMinutes by viewModel.todayScreenTimeMinutes.collectAsState()
+    val screenTimeMinutes by viewModel.screenTimeMinutes.collectAsState()
+    val dailyStudyGoalState by viewModel.dailyStudyGoalState.collectAsState()
+    val isInitialAssessmentCompleted by viewModel.isInitialAssessmentCompleted.collectAsState()
+    val isWeeklySummaryModalOpen by viewModel.isWeeklySummaryModalOpen.collectAsState()
+    val weeklySummaryState by viewModel.weeklySummaryState.collectAsState()
+    val transcriptionState by viewModel.transcriptionState.collectAsState()
+    val allStudyNotes by viewModel.allStudyNotes.collectAsState()
+    val topGameScores by viewModel.topGameScores.collectAsState()
+    val bestGameScore by viewModel.bestGameScore.collectAsState()
+    val totalGameCrystals by viewModel.totalGameCrystals.collectAsState()
+    val sqlQueryResult by viewModel.sqlQueryResult.collectAsState()
+    val themeCustomization by viewModel.themeCustomization.collectAsState()
+    val accessibilitySettings by viewModel.accessibilitySettings.collectAsState()
+    val appGeneralSettings by viewModel.appGeneralSettings.collectAsState()
+    val userFeedbackNotes by viewModel.userFeedbackNotes.collectAsState()
+    val levelUpEvent by viewModel.levelUpEvent.collectAsState()
 
     var showAuthDialog by remember { mutableStateOf(false) }
+    var showInitialAssessmentDialog by remember { mutableStateOf(false) }
+    var showSettingsPhotoDialog by remember { mutableStateOf(false) }
+    var showDailyLivesInfoDialog by remember { mutableStateOf(false) }
+    var hasDeferredAssessmentInSession by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    viewModel.setAppInForeground(true)
+                    viewModel.recordUserActivity()
+                    viewModel.refreshDailyLivesIfNewDay()
+                    viewModel.refreshDailyScreenTimeIfNewDay()
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.setAppInForeground(false)
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshDailyLivesIfNewDay()
+        viewModel.refreshDailyScreenTimeIfNewDay()
+    }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val credentialManager = remember { CredentialManager.create(context) }
@@ -145,6 +212,13 @@ fun MainAppContainer(
             if (permissionCheck != PackageManager.PERMISSION_GRANTED) {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+    }
+
+    // Prompt initial assessment ONLY after leaving the login screen (when user enters the dashboard)
+    LaunchedEffect(destination, isInitialAssessmentCompleted, hasDeferredAssessmentInSession) {
+        if (destination != AppDestination.LOGIN && !isInitialAssessmentCompleted && !hasDeferredAssessmentInSession) {
+            showInitialAssessmentDialog = true
         }
     }
 
@@ -185,18 +259,14 @@ fun MainAppContainer(
                 .fillMaxSize()
                 .testTag("app_scaffold"),
             topBar = {
-                if (destination != AppDestination.TECH_DETAIL) {
+                if (destination != AppDestination.TECH_DETAIL && destination != AppDestination.GAME_3D) {
                     AppTopBar(
                         currentLanguage = currentLanguage,
                         currentTheme = currentTheme,
                         userAccount = userAccount,
-                        onToggleLanguage = {
-                            viewModel.setLanguage(if (currentLanguage == Language.PT) Language.EN else Language.PT)
-                        },
-                        onToggleTheme = {
-                            val nextTheme = if (currentTheme == ThemePreference.DARK) ThemePreference.LIGHT else ThemePreference.DARK
-                            viewModel.setThemePreference(nextTheme)
-                        },
+                        dailyLives = dailyLives,
+                        isSettingsSelected = destination == AppDestination.SETTINGS,
+                        onOpenLivesInfo = { showDailyLivesInfoDialog = true },
                         onOpenLeaderboard = {
                             viewModel.navigateTo(AppDestination.LEADERBOARD)
                         },
@@ -206,24 +276,40 @@ fun MainAppContainer(
                             } else {
                                 viewModel.navigateTo(AppDestination.LOGIN)
                             }
+                        },
+                        onOpenSettings = {
+                            viewModel.navigateTo(
+                                if (destination == AppDestination.SETTINGS) AppDestination.HOME
+                                else AppDestination.SETTINGS
+                            )
                         }
                     )
                 }
             },
             bottomBar = {
-                AppBottomNav(
-                    currentDestination = destination,
-                    language = currentLanguage,
-                    onNavigate = { dest -> viewModel.navigateTo(dest) }
-                )
+                if (destination != AppDestination.GAME_3D) {
+                    AppBottomNav(
+                        currentDestination = destination,
+                        language = currentLanguage,
+                        onNavigate = { dest -> viewModel.navigateTo(dest) }
+                    )
+                }
             }
         ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
+                    .background(MaterialTheme.colorScheme.background)
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                awaitPointerEvent(PointerEventPass.Initial)
+                                viewModel.recordUserActivity()
+                            }
+                        }
+                    }
+            ) {
             when (destination) {
                 AppDestination.HOME -> {
                     HomeScreen(
@@ -238,9 +324,18 @@ fun MainAppContainer(
                         onSelectTrackerTech = { tech -> viewModel.setTrackerSelectedTech(tech) },
                         todayProgressMap = todayProgressMap,
                         isLoggedIn = userAccount?.isLoggedIn == true,
-                        onLogQuickSession = { tech, mins, xp -> viewModel.logQuickStudySession(tech, mins, xp) },
+                        todayScreenTimeMinutes = todayScreenTimeMinutes,
+                        screenTimeMinutes = screenTimeMinutes,
+                        dailyStudyGoalState = dailyStudyGoalState,
+                        isInitialAssessmentCompleted = isInitialAssessmentCompleted,
+                        onStartInitialAssessment = { showInitialAssessmentDialog = true },
                         onSelectDate = { dateIso -> viewModel.setCalendarDate(dateIso) },
                         onToggleSession = { viewModel.toggleSession(it) },
+                        getTechScore = { tech -> viewModel.getTechScore(tech) },
+                        onPromptAiTopic = { tech, topicTitle -> viewModel.promptAiAboutTopic(tech, topicTitle) },
+                        dailyLives = dailyLives,
+                        onOpenLivesInfo = { showDailyLivesInfoDialog = true },
+                        onOpenWeeklyAiSummary = { viewModel.openWeeklyStudySummaryModal() },
                         onOpenTech = { tech -> viewModel.openTechDetail(tech) },
                         onNavigate = { dest -> viewModel.navigateTo(dest) }
                     )
@@ -264,7 +359,12 @@ fun MainAppContainer(
                         pointsFeedback = pointsFeedback,
                         onDismissPointsFeedback = { viewModel.dismissPointsFeedback() },
                         onBack = { viewModel.navigateTo(AppDestination.TECH_HUB) },
-                        onAskAi = { viewModel.promptAiAboutTech(selectedTech) }
+                        onAskAi = { viewModel.promptAiAboutTech(selectedTech) },
+                        todayChallengesCount = todayProgressMap[selectedTech.id]?.completedChallengesCount ?: 0,
+                        badges = allBadges,
+                        dailyLives = dailyLives,
+                        appGeneralSettings = appGeneralSettings,
+                        onConsumeLife = { viewModel.consumeLifeForAttempt() }
                     )
                 }
 
@@ -274,8 +374,11 @@ fun MainAppContainer(
                         scoreInfo = scoreInfo,
                         badges = allBadges,
                         todayProgressMap = todayProgressMap,
+                        weeklyChallengeHistory = weeklyChallengeHistory,
+                        dailyStudyGoalState = dailyStudyGoalState,
                         getTechScore = { tech -> viewModel.getTechScore(tech) },
-                        onOpenTechDetail = { tech -> viewModel.openTechDetail(tech) }
+                        onOpenTechDetail = { tech -> viewModel.openTechDetail(tech) },
+                        onOpenWeeklyAiSummary = { viewModel.openWeeklyStudySummaryModal() }
                     )
                 }
 
@@ -301,6 +404,12 @@ fun MainAppContainer(
                         isLoading = isAiLoading,
                         streamingText = streamingText,
                         errorMessage = aiErrorMessage,
+                        transcriptionState = transcriptionState,
+                        onRecordingStateChanged = { isRec -> viewModel.setAudioRecordingState(isRec) },
+                        onAudioCaptured = { bytes, mime, dur ->
+                            viewModel.transcribeAudioPayload(bytes, mime, dur)
+                        },
+                        onClearTranscriptionState = { viewModel.clearTranscriptionState() },
                         onSendMessage = { prompt -> viewModel.sendAiUserMessage(prompt) },
                         onGenerateRoutine = { goal, techs, days, minutes ->
                             viewModel.generateRoutineWithAi(goal, techs, days, minutes)
@@ -308,6 +417,41 @@ fun MainAppContainer(
                         onSaveRoutineToCalendar = { plan ->
                             viewModel.saveRoutinePlanToCalendar(plan)
                         }
+                    )
+                }
+
+                AppDestination.GAME_3D -> {
+                    GameAndScene3DScreen(
+                        language = currentLanguage,
+                        bestScore = bestGameScore,
+                        selectedFocusTech = trackerSelectedTech,
+                        onGameFinished = { sc, maxC, cr, dur, tech ->
+                            viewModel.record3DGameScore(sc, maxC, cr, dur, tech)
+                        },
+                        onExit = { viewModel.navigateTo(AppDestination.HOME) }
+                    )
+                }
+
+                AppDestination.SQL_STUDIO -> {
+                    SqlDatabaseScreen(
+                        language = currentLanguage,
+                        studyNotes = allStudyNotes,
+                        topGameScores = topGameScores,
+                        bestGameScore = bestGameScore,
+                        totalCrystals = totalGameCrystals,
+                        sqlQueryResult = sqlQueryResult,
+                        transcriptionState = transcriptionState,
+                        onRecordingStateChanged = { isRec -> viewModel.setAudioRecordingState(isRec) },
+                        onAudioCaptured = { bytes, mime, dur ->
+                            viewModel.transcribeAudioPayload(bytes, mime, dur)
+                        },
+                        onClearTranscriptionState = { viewModel.clearTranscriptionState() },
+                        onAddNote = { tech, title, content, isVoice ->
+                            viewModel.addStudyNote(tech, title, content, isVoice)
+                        },
+                        onDeleteNote = { id -> viewModel.deleteStudyNote(id) },
+                        onRunSqlQuery = { sql -> viewModel.executeSqlQuery(sql) },
+                        onOpen3DGame = { viewModel.navigateTo(AppDestination.GAME_3D) }
                     )
                 }
 
@@ -331,8 +475,27 @@ fun MainAppContainer(
                     SettingsScreen(
                         currentLanguage = currentLanguage,
                         currentTheme = currentTheme,
+                        themeCustomization = themeCustomization,
+                        accessibilitySettings = accessibilitySettings,
+                        appGeneralSettings = appGeneralSettings,
+                        userFeedbackNotes = userFeedbackNotes,
+                        userAccount = userAccount,
+                        onBack = { viewModel.navigateTo(AppDestination.HOME) },
                         onSetLanguage = { viewModel.setLanguage(it) },
                         onSetTheme = { viewModel.setThemePreference(it) },
+                        onSelectThemePreset = { viewModel.selectThemePreset(it) },
+                        onUpdateThemeCustomization = { viewModel.updateThemeCustomization(it) },
+                        onResetThemeDefault = { viewModel.resetThemeCustomizationToDefault() },
+                        onUpdateAccessibility = { viewModel.updateAccessibilitySettings(it) },
+                        onResetAccessibility = { viewModel.resetAccessibilitySettings() },
+                        onUpdateAppGeneralSettings = { viewModel.updateAppGeneralSettings(it) },
+                        onSubmitFeedback = { category, rating, message ->
+                            viewModel.submitUserAppFeedback(category, rating, message)
+                        },
+                        onDeleteFeedback = { noteId -> viewModel.deleteUserAppFeedback(noteId) },
+                        onOpenWeeklyAiSummary = { viewModel.openWeeklyStudySummaryModal() },
+                        onOpenPhotoPicker = { showSettingsPhotoDialog = true },
+                        onRedoAssessment = { showInitialAssessmentDialog = true },
                         onResetStarterData = {},
                         onSendTestNotification = { viewModel.sendTestReminderNotification() }
                     )
@@ -397,6 +560,13 @@ fun MainAppContainer(
             onSyncLeaderboard = {
                 viewModel.syncScoreToLeaderboard()
             },
+            onUpdatePhoto = { newPhoto ->
+                viewModel.updateUserProfilePhoto(newPhoto)
+            },
+            onOpenThemeSettings = {
+                showAuthDialog = false
+                viewModel.navigateTo(AppDestination.SETTINGS)
+            },
             onSignOut = {
                 viewModel.signOut()
                 showAuthDialog = false
@@ -404,6 +574,67 @@ fun MainAppContainer(
             onDismiss = {
                 showAuthDialog = false
             }
+        )
+    }
+
+    // Initial Diagnostic Assessment Dialog (Only displayed after user has passed the Login screen)
+    if (showInitialAssessmentDialog && destination != AppDestination.LOGIN) {
+        InitialAssessmentDialog(
+            language = currentLanguage,
+            onComplete = { level, titlePt, titleEn, xp ->
+                viewModel.completeInitialAssessment(level, titlePt, titleEn, xp)
+                showInitialAssessmentDialog = false
+            },
+            onDismiss = {
+                hasDeferredAssessmentInSession = true
+                showInitialAssessmentDialog = false
+            }
+        )
+    }
+
+    // Profile Photo Dialog triggered from Settings screen
+    if (showSettingsPhotoDialog) {
+        ProfilePhotoDialog(
+            currentPhotoUrl = userAccount?.photoUrl,
+            displayName = userAccount?.displayName ?: "Dev",
+            language = currentLanguage,
+            onSavePhoto = { newPhoto ->
+                viewModel.updateUserProfilePhoto(newPhoto)
+                showSettingsPhotoDialog = false
+            },
+            onDismiss = {
+                showSettingsPhotoDialog = false
+            }
+        )
+    }
+
+    if (showDailyLivesInfoDialog) {
+        com.example.ui.components.DailyLivesInfoDialog(
+            livesInfo = dailyLives,
+            language = currentLanguage,
+            onDismiss = { showDailyLivesInfoDialog = false }
+        )
+    }
+
+    if (isWeeklySummaryModalOpen) {
+        WeeklyStudySummaryModal(
+            uiState = weeklySummaryState,
+            weeklyHistory = weeklyChallengeHistory,
+            scoreInfo = scoreInfo,
+            streakDays = streakInfo.streakDays,
+            language = currentLanguage,
+            onRetry = { viewModel.generateWeeklyStudySummary() },
+            onRegenerate = { viewModel.generateWeeklyStudySummary() },
+            onOpenTech = { tech -> viewModel.openTechDetail(tech) },
+            onDismiss = { viewModel.dismissWeeklyStudySummaryModal() }
+        )
+    }
+
+    levelUpEvent?.let { event ->
+        com.example.ui.components.LevelUpCelebrationDialog(
+            event = event,
+            language = currentLanguage,
+            onDismiss = { viewModel.dismissLevelUpEvent() }
         )
     }
 }

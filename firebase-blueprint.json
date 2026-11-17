@@ -5,68 +5,23 @@
       "description": "User profile with authentication and contact details",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "description": "Unique user authentication identifier"
-        },
-        "displayName": {
-          "type": "string",
-          "description": "User display name"
-        },
-        "email": {
-          "type": "string",
-          "description": "User email address if authenticated via Google"
-        },
-        "phoneNumber": {
-          "type": "string",
-          "description": "User phone or student number"
-        },
-        "photoUrl": {
-          "type": "string",
-          "description": "Profile picture URL"
-        },
-        "authProvider": {
-          "type": "string",
-          "description": "Authentication method used (google or phone)"
-        },
-        "totalScore": {
-          "type": "number",
-          "description": "Cumulative developer XP points"
-        },
-        "levelNumber": {
-          "type": "number",
-          "description": "Developer ranking level"
-        },
-        "levelTitle": {
-          "type": "string",
-          "description": "Developer ranking title"
-        },
-        "streakDays": {
-          "type": "number",
-          "description": "Current consecutive study streak days"
-        },
-        "completedActivitiesCount": {
-          "type": "number",
-          "description": "Total coding activities completed"
-        },
-        "badgesCount": {
-          "type": "number",
-          "description": "Total unlocked badges count"
-        },
-        "themeConfig": {
-          "type": "object",
-          "description": "User's customized color palette and theme mode preferences"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Account registration timestamp"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Profile last updated timestamp"
-        }
+        "userId": { "type": "string", "description": "Unique user authentication identifier" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "email": { "type": "string", "description": "User email address if authenticated via Google" },
+        "phoneNumber": { "type": "string", "description": "User phone or student number" },
+        "photoUrl": { "type": "string", "description": "Profile picture URL" },
+        "authProvider": { "type": "string", "description": "Authentication method used (google or phone)" },
+        "totalScore": { "type": "number", "description": "Cumulative developer XP points" },
+        "levelNumber": { "type": "number", "description": "Developer ranking level" },
+        "levelTitle": { "type": "string", "description": "Developer ranking title" },
+        "streakDays": { "type": "number", "description": "Current consecutive study streak days" },
+        "completedActivitiesCount": { "type": "number", "description": "Total coding activities completed" },
+        "badgesCount": { "type": "number", "description": "Total unlocked badges count" },
+        "techMinutes": { "type": "object", "description": "Cumulative study minutes per technology" },
+        "unlockedBadgeIds": { "type": "array", "description": "List of unlocked achievement badge IDs" },
+        "themeConfig": { "type": "object", "description": "User customized color palette and theme mode preferences" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account registration timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Profile last updated timestamp" }
       },
       "required": ["userId", "displayName", "authProvider", "totalScore"]
     },
@@ -75,51 +30,18 @@
       "description": "Public developer scoreboard entry displaying ranking and score",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "description": "Unique developer ID"
-        },
-        "displayName": {
-          "type": "string",
-          "description": "Public display name"
-        },
-        "phoneNumber": {
-          "type": "string",
-          "description": "Masked or formatted contact number"
-        },
-        "photoUrl": {
-          "type": "string",
-          "description": "Avatar or photo URL"
-        },
-        "authProvider": {
-          "type": "string",
-          "description": "Sign-in method"
-        },
-        "totalScore": {
-          "type": "number",
-          "description": "Current total score / XP on the leaderboard"
-        },
-        "levelNumber": {
-          "type": "number",
-          "description": "Developer level tier (1-5)"
-        },
-        "levelTitle": {
-          "type": "string",
-          "description": "Developer level title"
-        },
-        "streakDays": {
-          "type": "number",
-          "description": "Study streak in days"
-        },
-        "badgesCount": {
-          "type": "number",
-          "description": "Number of earned badges"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Scoreboard entry timestamp"
-        }
+        "userId": { "type": "string", "description": "Unique developer ID" },
+        "displayName": { "type": "string", "description": "Public display name" },
+        "phoneNumber": { "type": "string", "description": "Masked or formatted contact number" },
+        "photoUrl": { "type": "string", "description": "Avatar or photo URL" },
+        "authProvider": { "type": "string", "description": "Sign-in method" },
+        "totalScore": { "type": "number", "description": "Current total score / XP on the leaderboard" },
+        "levelNumber": { "type": "number", "description": "Developer level tier" },
+        "levelTitle": { "type": "string", "description": "Developer level title" },
+        "streakDays": { "type": "number", "description": "Study streak in days" },
+        "badgesCount": { "type": "number", "description": "Number of earned badges" },
+        "unlockedBadgeIds": { "type": "array", "description": "Unlocked badge IDs" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Scoreboard entry timestamp" }
       },
       "required": ["userId", "displayName", "totalScore"]
     },
@@ -128,51 +50,219 @@
       "description": "Daily study progress tracking per programming language",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "description": "User identifier"
-        },
-        "techId": {
-          "type": "string",
-          "description": "Programming language ID"
-        },
-        "techName": {
-          "type": "string",
-          "description": "Programming language display name"
-        },
-        "dateIso": {
-          "type": "string",
-          "description": "Date ISO string (YYYY-MM-DD)"
-        },
-        "completedChallengesCount": {
-          "type": "number",
-          "description": "Count of completed challenges for this language"
-        },
-        "completedQuizCount": {
-          "type": "number",
-          "description": "Count of completed quizzes"
-        },
-        "minutesStudied": {
-          "type": "number",
-          "description": "Total study minutes logged today"
-        },
-        "xpEarned": {
-          "type": "number",
-          "description": "XP earned in this language"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Last progress update timestamp"
-        }
+        "userId": { "type": "string", "description": "User identifier" },
+        "techId": { "type": "string", "description": "Programming language ID" },
+        "techName": { "type": "string", "description": "Programming language display name" },
+        "dateIso": { "type": "string", "description": "Date ISO string (YYYY-MM-DD)" },
+        "completedChallengesCount": { "type": "number", "description": "Count of completed challenges for this language" },
+        "completedQuizCount": { "type": "number", "description": "Count of completed quizzes" },
+        "minutesStudied": { "type": "number", "description": "Total study minutes logged today" },
+        "xpEarned": { "type": "number", "description": "XP earned in this language" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last progress update timestamp" }
       },
       "required": ["userId", "techId", "dateIso"]
+    },
+    "ChatDirectoryUser": {
+      "title": "ChatDirectoryUser",
+      "description": "Public non-PII developer directory entry for username search and chat requests",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Public username" },
+        "displayNameLower": { "type": "string", "description": "Lowercase searchable username" },
+        "photoUrl": { "type": "string", "description": "Shareable avatar URL or compact Data URI" },
+        "levelNumber": { "type": "number", "description": "Current level number" },
+        "levelTitle": { "type": "string", "description": "Current level title" },
+        "totalScore": { "type": "number", "description": "Total XP" },
+        "isPublic": { "type": "boolean", "description": "Always true so authenticated users can list directory" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last active timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["userId", "displayName", "displayNameLower", "isPublic", "updatedAt"]
+    },
+    "ChatRequest": {
+      "title": "ChatRequest",
+      "description": "1-on-1 conversation request sent between users requiring recipient acceptance",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "Sender Firebase Auth UID" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "senderPhotoUrl": { "type": "string", "description": "Sender avatar" },
+        "recipientId": { "type": "string", "description": "Recipient Firebase Auth UID" },
+        "recipientName": { "type": "string", "description": "Recipient display name" },
+        "recipientPhotoUrl": { "type": "string", "description": "Recipient avatar" },
+        "participantIds": { "type": "array", "description": "Exactly [senderId, recipientId]" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"], "description": "Request status" },
+        "introMessage": { "type": "string", "description": "Optional intro message" },
+        "chatId": { "type": "string", "description": "Deterministic chat room ID" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["senderId", "senderName", "recipientId", "recipientName", "participantIds", "status", "chatId", "createdAt", "updatedAt"]
+    },
+    "ChatRoom": {
+      "title": "ChatRoom",
+      "description": "Accepted 1-on-1 conversation metadata",
+      "type": "object",
+      "properties": {
+        "participantIds": { "type": "array", "description": "Sorted pair of 2 participant UIDs" },
+        "participantNames": { "type": "object", "description": "Map of uid to displayName" },
+        "participantPhotos": { "type": "object", "description": "Map of uid to photoUrl" },
+        "lastMessageText": { "type": "string", "description": "Preview of last message" },
+        "lastMessageType": { "type": "string", "enum": ["text", "image", "video", "file", "call"], "description": "Last message type" },
+        "lastSenderId": { "type": "string", "description": "UID of last message sender" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last message timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["participantIds", "participantNames", "lastMessageText", "lastMessageType", "lastSenderId", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Message in a 1-on-1 chat (text, image, video, file, or call log)",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string", "description": "Parent chat ID" },
+        "senderId": { "type": "string", "description": "Sender UID" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "participantIds": { "type": "array", "description": "Denormalized participant UIDs for subcollection security" },
+        "messageType": { "type": "string", "enum": ["text", "image", "video", "file", "call"], "description": "Message content type" },
+        "text": { "type": "string", "description": "Message body or caption" },
+        "mediaName": { "type": "string", "description": "Attachment filename" },
+        "mediaMimeType": { "type": "string", "description": "Attachment MIME type" },
+        "mediaSizeBytes": { "type": "number", "description": "Attachment byte size" },
+        "inlineMediaDataUrl": { "type": "string", "description": "Inline Data URL for images or small files" },
+        "thumbnailDataUrl": { "type": "string", "description": "Inline JPEG thumbnail for videos" },
+        "chunkCount": { "type": "number", "description": "Number of media chunks stored in chunks subcollection" },
+        "callType": { "type": "string", "description": "audio, video, or empty" },
+        "callDurationSec": { "type": "number", "description": "Call duration in seconds" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Message timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["chatId", "senderId", "senderName", "participantIds", "messageType", "createdAt"]
+    },
+    "ChatMediaChunk": {
+      "title": "ChatMediaChunk",
+      "description": "Base64 chunk of an attached video or file exceeding single-document inline threshold",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "Uploader UID" },
+        "participantIds": { "type": "array", "description": "Denormalized participant UIDs" },
+        "chunkIndex": { "type": "number", "description": "Zero-based chunk sequence index" },
+        "dataBase64": { "type": "string", "description": "Chunk substring" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Upload timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["senderId", "participantIds", "chunkIndex", "dataBase64", "createdAt"]
+    },
+    "CallSession": {
+      "title": "CallSession",
+      "description": "Real-time 1-on-1 voice/video call signaling session",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string", "description": "Associated chat ID" },
+        "callerId": { "type": "string", "description": "Caller UID" },
+        "callerName": { "type": "string", "description": "Caller display name" },
+        "callerPhotoUrl": { "type": "string", "description": "Caller avatar" },
+        "calleeId": { "type": "string", "description": "Callee UID" },
+        "calleeName": { "type": "string", "description": "Callee display name" },
+        "participantIds": { "type": "array", "description": "Pair [callerId, calleeId]" },
+        "callType": { "type": "string", "enum": ["audio", "video"], "description": "Voice or video call" },
+        "status": { "type": "string", "enum": ["ringing", "accepted", "declined", "ended", "missed"], "description": "Call lifecycle state" },
+        "offerSdp": { "type": "string", "description": "WebRTC SDP offer" },
+        "answerSdp": { "type": "string", "description": "WebRTC SDP answer" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["chatId", "callerId", "callerName", "calleeId", "calleeName", "participantIds", "callType", "status", "createdAt", "updatedAt"]
+    },
+    "IceCandidateDoc": {
+      "title": "IceCandidateDoc",
+      "description": "WebRTC ICE candidate for call negotiation",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "Candidate creator UID" },
+        "participantIds": { "type": "array", "description": "Denormalized participant UIDs" },
+        "sdpMid": { "type": "string", "description": "Media stream ID" },
+        "sdpMLineIndex": { "type": "number", "description": "Media line index" },
+        "candidate": { "type": "string", "description": "ICE candidate string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["senderId", "participantIds", "sdpMid", "sdpMLineIndex", "candidate", "createdAt"]
+    },
+    "LiveStudyRoom": {
+      "title": "LiveStudyRoom",
+      "description": "Real-time audio/video Live Study Room for discussing programming topics",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string", "description": "Host Firebase Auth UID" },
+        "hostName": { "type": "string", "description": "Host display name" },
+        "hostPhotoUrl": { "type": "string", "description": "Host avatar" },
+        "title": { "type": "string", "description": "Live discussion topic title" },
+        "topicTechId": { "type": "string", "description": "Technology ID (e.g., python, sql, java, general)" },
+        "topicLabel": { "type": "string", "description": "Human-readable subject label" },
+        "description": { "type": "string", "description": "Optional study discussion agenda" },
+        "liveMode": { "type": "string", "enum": ["audio", "video"], "description": "Broadcast mode" },
+        "status": { "type": "string", "enum": ["live", "ended"], "description": "Room state" },
+        "participantIds": { "type": "array", "description": "List of active participant UIDs" },
+        "participantNames": { "type": "object", "description": "Map of uid to displayName" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["hostId", "hostName", "title", "topicTechId", "topicLabel", "liveMode", "status", "participantIds", "createdAt", "updatedAt"]
+    },
+    "LiveRoomMessage": {
+      "title": "LiveRoomMessage",
+      "description": "Real-time Q&A or discussion message inside a Live Study Room",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string", "description": "Parent Live room ID" },
+        "senderId": { "type": "string", "description": "Sender UID" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "senderPhotoUrl": { "type": "string", "description": "Sender avatar" },
+        "text": { "type": "string", "description": "Discussion text" },
+        "messageType": { "type": "string", "enum": ["text", "hand_raise", "system"], "description": "Entry type" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["roomId", "senderId", "senderName", "text", "messageType", "createdAt"]
+    },
+    "LiveSignal": {
+      "title": "LiveSignal",
+      "description": "WebRTC SDP/ICE signaling packet between two peers in a Live Study Room",
+      "type": "object",
+      "properties": {
+        "fromUid": { "type": "string", "description": "Sender UID" },
+        "toUid": { "type": "string", "description": "Target peer UID" },
+        "peerPair": { "type": "array", "description": "Two UIDs [fromUid, toUid] for scoped queries" },
+        "type": { "type": "string", "enum": ["offer", "answer", "ice"], "description": "Signal type" },
+        "sdp": { "type": "string", "description": "SDP payload when type is offer/answer" },
+        "sdpMid": { "type": "string", "description": "ICE sdpMid" },
+        "sdpMLineIndex": { "type": "number", "description": "ICE m-line index" },
+        "candidate": { "type": "string", "description": "ICE candidate string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["fromUid", "toUid", "peerPair", "type", "createdAt"]
+    },
+    "TargetSubjectsPreference": {
+      "title": "TargetSubjectsPreference",
+      "description": "User-selected target programming subjects and daily focus goal stored per user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID" },
+        "subjectIds": { "type": "array", "description": "Bounded list (1..12) of selected Technology IDs (e.g., python, sql, html)" },
+        "dailyGoalMinutes": { "type": "number", "description": "Target daily study minutes (10..240)" },
+        "learningTrack": { "type": "string", "enum": ["balanced", "backend_data", "frontend_web", "mobile_cloud", "custom"], "description": "Focus preset or custom track" },
+        "studyGoalNote": { "type": "string", "description": "Optional user study goal note (max 200 chars)" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via FieldValue.serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via FieldValue.serverTimestamp()" }
+      },
+      "required": ["userId", "subjectIds", "dailyGoalMinutes", "learningTrack", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Private user profile documents"
+    },
+    "/users/{userId}/preferences/{prefId}": {
+      "schema": { "$ref": "#/entities/TargetSubjectsPreference" },
+      "description": "User target study subjects and learning focus preferences"
     },
     "/users/{userId}/daily_progress/{progressId}": {
       "schema": { "$ref": "#/entities/DailyStudyProgress" },
@@ -181,6 +271,46 @@
     "/leaderboard/{userId}": {
       "schema": { "$ref": "#/entities/LeaderboardEntry" },
       "description": "Public developer leaderboard and scoreboard collection"
+    },
+    "/chat_directory/{userId}": {
+      "schema": { "$ref": "#/entities/ChatDirectoryUser" },
+      "description": "Searchable public username directory for starting 1-on-1 chats"
+    },
+    "/chat_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/ChatRequest" },
+      "description": "Pending, accepted, or declined 1-on-1 chat requests"
+    },
+    "/chats/{chatId}": {
+      "schema": { "$ref": "#/entities/ChatRoom" },
+      "description": "Accepted 1-on-1 conversations"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages and media attachments in a 1-on-1 conversation"
+    },
+    "/chats/{chatId}/messages/{messageId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/ChatMediaChunk" },
+      "description": "Media data chunks for files and videos"
+    },
+    "/call_sessions/{callId}": {
+      "schema": { "$ref": "#/entities/CallSession" },
+      "description": "Active and recent 1-on-1 voice/video call signaling sessions"
+    },
+    "/call_sessions/{callId}/candidates/{candidateId}": {
+      "schema": { "$ref": "#/entities/IceCandidateDoc" },
+      "description": "WebRTC ICE candidates for a call session"
+    },
+    "/live_rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/LiveStudyRoom" },
+      "description": "Active live audio/video study discussion rooms"
+    },
+    "/live_rooms/{roomId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/LiveRoomMessage" },
+      "description": "Real-time discussion messages inside a live room"
+    },
+    "/live_rooms/{roomId}/signals/{signalId}": {
+      "schema": { "$ref": "#/entities/LiveSignal" },
+      "description": "WebRTC SDP/ICE signals between peers in a live room"
     }
   }
 }

@@ -49,6 +49,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrackChanges
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Button
@@ -82,13 +84,16 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.model.AccessibilitySettings
 import com.example.model.AppGeneralSettings
 import com.example.model.FontScalePreset
 import com.example.model.Language
+import com.example.model.ProSubscriptionState
 import com.example.model.ThemeCustomization
 import com.example.model.ThemePreference
 import com.example.model.ThemePreset
@@ -96,6 +101,7 @@ import com.example.model.UserAccount
 import com.example.model.UserFeedbackNote
 import com.example.ui.components.FullColorPaletteDialog
 import com.example.ui.components.PresetPaletteChip
+import com.example.ui.components.ProSubscriptionBannerCard
 import com.example.ui.components.UserAvatar
 import com.example.ui.theme.LocalDevRoutineColors
 
@@ -136,7 +142,11 @@ fun SettingsScreen(
     onOpenPhotoPicker: () -> Unit = {},
     onRedoAssessment: () -> Unit = {},
     onResetStarterData: () -> Unit = {},
-    onSendTestNotification: () -> Unit = {}
+    onSendTestNotification: () -> Unit = {},
+    targetSubjectsCount: Int = 0,
+    onOpenTargetSubjects: () -> Unit = {},
+    proSubscriptionState: ProSubscriptionState = ProSubscriptionState(),
+    onOpenProSubscription: () -> Unit = {}
 ) {
     val isPt = currentLanguage == Language.PT
     val brand = LocalDevRoutineColors.current
@@ -193,7 +203,7 @@ fun SettingsScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (isPt) "Voltar" else "Back",
+                            contentDescription = stringResource(R.string.common_back),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -215,12 +225,11 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isPt) "Central de Configurações" else "Settings Hub",
+                            text = stringResource(R.string.settings_title),
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
                         )
                         Text(
-                            text = if (isPt) "Acessibilidade, opções gerais, tema e feedbacks em um só lugar"
-                            else "Accessibility, general preferences, theme and feedbacks in one place",
+                            text = stringResource(R.string.settings_subtitle),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -267,6 +276,104 @@ fun SettingsScreen(
             }
         }
 
+        // 2b. DevRoutine Pro Monthly Subscription Card (R$ 13/mês • Sem anúncios +15 vidas/dia)
+        item {
+            ProSubscriptionBannerCard(
+                subscriptionState = proSubscriptionState,
+                language = currentLanguage,
+                onOpenSubscriptionDialog = onOpenProSubscription
+            )
+        }
+
+        // 2c. Dedicated Dynamic App Language Localization Card (Portuguese / English)
+        if (selectedCategory == SettingsCategory.ALL || selectedCategory == SettingsCategory.GENERAL) {
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    border = BorderStroke(
+                        1.2.dp,
+                        Brush.linearGradient(listOf(primaryColor.copy(alpha = 0.65f), Color(0xFF00ACC1).copy(alpha = 0.65f)))
+                    ),
+                    modifier = Modifier.testTag("card_settings_language_toggle")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SettingsSectionHeader(
+                            icon = Icons.Default.Translate,
+                            iconTint = Color(0xFF00ACC1),
+                            title = stringResource(R.string.settings_lang_card_title),
+                            subtitle = stringResource(R.string.settings_lang_card_subtitle)
+                        )
+
+                        SettingsToggleRow(
+                            icon = Icons.Default.Language,
+                            iconTint = primaryColor,
+                            title = stringResource(R.string.settings_lang_toggle_label),
+                            description = stringResource(R.string.settings_lang_toggle_desc),
+                            checked = currentLanguage == Language.EN,
+                            onCheckedChange = { useEnglish ->
+                                onSetLanguage(if (useEnglish) Language.EN else Language.PT)
+                            },
+                            testTag = "switch_toggle_language"
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            LanguageOptionCard(
+                                language = Language.PT,
+                                isSelected = currentLanguage == Language.PT,
+                                onClick = { onSetLanguage(Language.PT) },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            LanguageOptionCard(
+                                language = Language.EN,
+                                isSelected = currentLanguage == Language.EN,
+                                onClick = { onSetLanguage(Language.EN) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = primaryColor.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.35f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(R.string.settings_lang_active_res_badge),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = primaryColor,
+                                modifier = Modifier
+                                    .padding(horizontal = 10.dp, vertical = 7.dp)
+                                    .testTag("badge_active_strings_resource")
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(R.string.settings_lang_live_preview),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // ============================================================
         // SECTION A: ACESSIBILIDADE (Accessibility)
         // ============================================================
@@ -288,9 +395,8 @@ fun SettingsScreen(
                         SettingsSectionHeader(
                             icon = Icons.Default.AccessibilityNew,
                             iconTint = Color(0xFF00B4D8),
-                            title = if (isPt) "Acessibilidade" else "Accessibility",
-                            subtitle = if (isPt) "Ajuste leitura, contraste e conforto visual ao seu estilo"
-                            else "Tune text size, contrast and visual comfort for your needs"
+                            title = stringResource(R.string.settings_accessibility_title),
+                            subtitle = stringResource(R.string.settings_accessibility_subtitle)
                         )
 
                         // Text Size Presets
@@ -304,7 +410,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isPt) "Tamanho do Texto" else "Text Size",
+                                    text = stringResource(R.string.settings_text_size),
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                                 )
                             }
@@ -360,8 +466,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = if (isPt) "Prévia: Aprender código todos os dias fica ainda mais confortável!"
-                                    else "Preview: Learning code every day feels even more comfortable!",
+                                    text = stringResource(R.string.settings_text_size_preview),
                                     style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.padding(12.dp)
                                 )
@@ -372,9 +477,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.Contrast,
                             iconTint = primaryColor,
-                            title = if (isPt) "Alto Contraste nas Bordas" else "High Contrast Borders",
-                            description = if (isPt) "Reforça contornos de cartões e botões para melhor leitura"
-                            else "Strengthens card and button outlines for sharper readability",
+                            title = stringResource(R.string.settings_high_contrast_title),
+                            description = stringResource(R.string.settings_high_contrast_desc),
                             checked = accessibilitySettings.highContrastBorders,
                             onCheckedChange = { checked ->
                                 onUpdateAccessibility(accessibilitySettings.copy(highContrastBorders = checked))
@@ -386,9 +490,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.Animation,
                             iconTint = accentColor,
-                            title = if (isPt) "Reduzir Animações" else "Reduce Motion",
-                            description = if (isPt) "Suaviza brilhos contínuos e animações de pulsação"
-                            else "Minimizes continuous sparkles and pulsing motion effects",
+                            title = stringResource(R.string.settings_reduce_motion_title),
+                            description = stringResource(R.string.settings_reduce_motion_desc),
                             checked = accessibilitySettings.reduceMotion,
                             onCheckedChange = { checked ->
                                 onUpdateAccessibility(accessibilitySettings.copy(reduceMotion = checked))
@@ -400,9 +503,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.Vibration,
                             iconTint = Color(0xFF4CAF50),
-                            title = if (isPt) "Resposta Tátil (Vibração)" else "Haptic Feedback",
-                            description = if (isPt) "Vibração leve e amigável ao interagir com botões e quizzes"
-                            else "Gentle tactile vibration when tapping buttons and quizzes",
+                            title = stringResource(R.string.settings_haptic_title),
+                            description = stringResource(R.string.settings_haptic_desc),
                             checked = accessibilitySettings.hapticFeedbackEnabled,
                             onCheckedChange = { checked ->
                                 onUpdateAccessibility(accessibilitySettings.copy(hapticFeedbackEnabled = checked))
@@ -424,7 +526,7 @@ fun SettingsScreen(
                                 Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isPt) "Restaurar Acessibilidade Padrão" else "Reset Accessibility Defaults",
+                                    text = stringResource(R.string.settings_reset_accessibility),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -467,7 +569,7 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = if (isPt) "Opções de Tema & Cores" else "Theme & Color Options",
+                                        text = stringResource(R.string.settings_theme_title),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                     )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -479,11 +581,10 @@ fun SettingsScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = if (userAccount?.isLoggedIn == true) {
-                                                if (isPt) "Salvo na conta e neste dispositivo" else "Saved to your account & locally"
-                                            } else {
-                                                if (isPt) "Salvo localmente neste dispositivo" else "Saved locally on this device"
-                                            },
+                                            text = stringResource(
+                                                if (userAccount?.isLoggedIn == true) R.string.settings_theme_synced
+                                                else R.string.settings_theme_local
+                                            ),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -523,7 +624,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ThemeOptionCard(
-                                title = if (isPt) "Escuro" else "Dark",
+                                title = stringResource(R.string.settings_theme_dark),
                                 icon = Icons.Default.DarkMode,
                                 isSelected = currentTheme == ThemePreference.DARK,
                                 onClick = { onSetTheme(ThemePreference.DARK) },
@@ -531,7 +632,7 @@ fun SettingsScreen(
                             )
 
                             ThemeOptionCard(
-                                title = if (isPt) "Claro" else "Light",
+                                title = stringResource(R.string.settings_theme_light),
                                 icon = Icons.Default.LightMode,
                                 isSelected = currentTheme == ThemePreference.LIGHT,
                                 onClick = { onSetTheme(ThemePreference.LIGHT) },
@@ -539,7 +640,7 @@ fun SettingsScreen(
                             )
 
                             ThemeOptionCard(
-                                title = if (isPt) "Sistema" else "System",
+                                title = stringResource(R.string.settings_theme_system),
                                 icon = Icons.Default.PhoneAndroid,
                                 isSelected = currentTheme == ThemePreference.SYSTEM,
                                 onClick = { onSetTheme(ThemePreference.SYSTEM) },
@@ -561,15 +662,18 @@ fun SettingsScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = if (isPt) "Paleta Atual" else "Active Palette",
+                                        text = stringResource(R.string.settings_active_palette),
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     val activePreset = ThemePreset.fromId(themeCustomization.presetId)
                                     val label = when {
-                                        themeCustomization.isDefaultPalette -> if (isPt) "Roxo & Carmesim (Padrão Principal)" else "Purple & Crimson (Primary Default)"
+                                        themeCustomization.isDefaultPalette -> stringResource(R.string.settings_default_palette)
                                         activePreset != null -> if (isPt) activePreset.namePt else activePreset.nameEn
-                                        else -> if (isPt) "Customizada (${ThemeCustomization.formatHex(themeCustomization.primaryColorHex)})" else "Custom (${ThemeCustomization.formatHex(themeCustomization.primaryColorHex)})"
+                                        else -> stringResource(
+                                            R.string.settings_custom_palette,
+                                            ThemeCustomization.formatHex(themeCustomization.primaryColorHex)
+                                        )
                                     }
                                     Text(
                                         text = label,
@@ -589,7 +693,7 @@ fun SettingsScreen(
 
                         // Quick 12 Preset Palettes Grid
                         Text(
-                            text = if (isPt) "Temas Prontos (Escolha Rápida)" else "Preset Palettes (Quick Pick)",
+                            text = stringResource(R.string.settings_preset_palettes),
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                         )
 
@@ -631,7 +735,7 @@ fun SettingsScreen(
                                 Icon(Icons.Default.ColorLens, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isPt) "Paleta Completa & Customizar" else "Full Palette & Customize",
+                                    text = stringResource(R.string.settings_full_palette_btn),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
                                 )
@@ -645,7 +749,7 @@ fun SettingsScreen(
                                 ) {
                                     Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(if (isPt) "Padrão" else "Reset", fontSize = 12.sp)
+                                    Text(stringResource(R.string.settings_reset_btn), fontSize = 12.sp)
                                 }
                             }
                         }
@@ -673,9 +777,8 @@ fun SettingsScreen(
                         SettingsSectionHeader(
                             icon = Icons.Default.Settings,
                             iconTint = primaryColor,
-                            title = if (isPt) "Configuração Geral do Aplicativo" else "General App Settings",
-                            subtitle = if (isPt) "Perfil, idioma, notificações e comportamento do cronômetro"
-                            else "Profile, language, notifications and study timer behavior"
+                            title = stringResource(R.string.settings_general_title),
+                            subtitle = stringResource(R.string.settings_general_subtitle)
                         )
 
                         Row(
@@ -696,11 +799,12 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = userAccount?.displayName ?: (if (isPt) "Desenvolvedor" else "Developer"),
+                                        text = userAccount?.displayName ?: stringResource(R.string.settings_default_dev_name),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                     )
                                     Text(
-                                        text = if (isPt) userAccount?.levelTitlePt ?: "Aspirante a Dev" else userAccount?.levelTitleEn ?: "Aspiring Dev",
+                                        text = (if (isPt) userAccount?.levelTitlePt else userAccount?.levelTitleEn)
+                                            ?: stringResource(R.string.settings_default_dev_level),
                                         fontSize = 12.sp,
                                         color = accentColor,
                                         fontWeight = FontWeight.Medium
@@ -715,7 +819,7 @@ fun SettingsScreen(
                             ) {
                                 Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = if (isPt) "Foto" else "Photo", fontSize = 12.sp)
+                                Text(text = stringResource(R.string.settings_photo_btn), fontSize = 12.sp)
                             }
                         }
 
@@ -730,43 +834,31 @@ fun SettingsScreen(
                             Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isPt) "Diagnóstico Inicial Dev (Opcional • 5 Desafios)" else "Initial Dev Diagnostic (Optional • 5 Challenges)",
+                                text = stringResource(R.string.settings_redo_diagnostic_btn),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
                         }
 
-                        // Language Switcher inside General Settings
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = null,
-                                tint = primaryColor,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isPt) "Idioma do Aplicativo" else "App Language",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        OutlinedButton(
+                            onClick = onOpenTargetSubjects,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_settings_target_subjects")
                         ) {
-                            LanguageOptionCard(
-                                language = Language.PT,
-                                isSelected = currentLanguage == Language.PT,
-                                onClick = { onSetLanguage(Language.PT) },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            LanguageOptionCard(
-                                language = Language.EN,
-                                isSelected = currentLanguage == Language.EN,
-                                onClick = { onSetLanguage(Language.EN) },
-                                modifier = Modifier.weight(1f)
+                            Icon(Icons.Default.TrackChanges, contentDescription = null, tint = primaryColor, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (targetSubjectsCount > 0) {
+                                    stringResource(R.string.settings_target_subjects_count, targetSubjectsCount)
+                                } else {
+                                    stringResource(R.string.settings_target_subjects_choose)
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = primaryColor
                             )
                         }
 
@@ -781,14 +873,12 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isPt) "Pausa Automática do Cronômetro por Inatividade"
-                                    else "Study Timer Inactivity Auto-Pause",
+                                    text = stringResource(R.string.settings_idle_pause_title),
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                                 )
                             }
                             Text(
-                                text = if (isPt) "Pausa o tempo de estudo automaticamente se não houver interação por:"
-                                else "Automatically pauses active study tracking when idle for:",
+                                text = stringResource(R.string.settings_idle_pause_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -821,8 +911,10 @@ fun SettingsScreen(
                                         ) {
                                             Text(
                                                 text = if (mins == 2) {
-                                                    if (isPt) "$mins min (Padrão)" else "$mins min (Default)"
-                                                } else "$mins min",
+                                                    stringResource(R.string.settings_idle_min_default, mins)
+                                                } else {
+                                                    stringResource(R.string.settings_idle_min, mins)
+                                                },
                                                 fontSize = 11.sp,
                                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                                 color = if (selected) accentColor else MaterialTheme.colorScheme.onSurface
@@ -837,9 +929,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.Notifications,
                             iconTint = accentColor,
-                            title = if (isPt) "Lembretes Diários (WorkManager)" else "Daily Study Reminders (WorkManager)",
-                            description = if (isPt) "Notificações locais 15 min antes das rotinas agendadas no Calendário"
-                            else "Local push notifications 15 min before scheduled Calendar sessions",
+                            title = stringResource(R.string.settings_daily_reminders_title),
+                            description = stringResource(R.string.settings_daily_reminders_desc),
                             checked = appGeneralSettings.dailyRemindersEnabled,
                             onCheckedChange = { enabled ->
                                 onUpdateAppGeneralSettings(appGeneralSettings.copy(dailyRemindersEnabled = enabled))
@@ -858,7 +949,7 @@ fun SettingsScreen(
                             Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isPt) "Disparar Notificação de Teste" else "Send Test Notification",
+                                text = stringResource(R.string.settings_test_notification_btn),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
@@ -883,7 +974,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isPt) "Tecnologias & Recursos Inclusos" else "Covered Technologies & Features",
+                                text = stringResource(R.string.settings_covered_techs_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                         }
@@ -891,8 +982,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = if (isPt) "• Linguagens & Web: Python, SQL, HTML, CSS, Java, JavaScript, TypeScript, Kotlin, Go\n• Bancos de Dados: MySQL, PostgreSQL, MongoDB & SQLite Studio\n• Inteligência Artificial: DevTutor AI, Resumo Semanal & Transcrição de Voz\n• Notificações Locais: WorkManager (Jetpack)"
-                            else "• Languages & Web: Python, SQL, HTML, CSS, Java, JavaScript, TypeScript, Kotlin, Go\n• Databases: MySQL, PostgreSQL, MongoDB & SQLite Studio\n• Artificial Intelligence: DevTutor AI, Weekly Summary & Voice Transcription\n• Local Notifications: WorkManager (Jetpack)",
+                            text = stringResource(R.string.settings_covered_techs_body),
                             style = MaterialTheme.typography.bodySmall,
                             lineHeight = 20.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -923,9 +1013,8 @@ fun SettingsScreen(
                         SettingsSectionHeader(
                             icon = Icons.Default.Feedback,
                             iconTint = Color(0xFFFFD54F),
-                            title = if (isPt) "Sobre os Feedbacks" else "About Feedbacks",
-                            subtitle = if (isPt) "Entenda e personalize como o app celebra conquistas, acolhe erros e gera análises"
-                            else "Understand and customize celebrations, gentle retry hints and AI feedback"
+                            title = stringResource(R.string.settings_feedbacks_title),
+                            subtitle = stringResource(R.string.settings_feedbacks_subtitle)
                         )
 
                         // Explainer Box 1: How feedback works in DevRoutine
@@ -942,21 +1031,13 @@ fun SettingsScreen(
                                     Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFFF4D7D), modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (isPt) "Como funcionam os feedbacks no DevRoutine?" else "How do feedbacks work in DevRoutine?",
+                                        text = stringResource(R.string.settings_feedbacks_how_title),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
                                 }
                                 Text(
-                                    text = if (isPt) {
-                                        "• Vitórias: Cada desafio ou quiz concluído exibe uma mensagem comemorativa com XP e preservação das suas 25 vidas diárias.\n" +
-                                        "• Erros com carinho: Ao errar, você recebe uma dica gentil para tentar novamente sem desânimo.\n" +
-                                        "• Resumo Semanal com IA: Analisa seus últimos 7 dias e cria um plano de estudos personalizado."
-                                    } else {
-                                        "• Victories: Completing challenges or quizzes triggers celebratory XP feedback alongside your 25 daily lives.\n" +
-                                        "• Gentle retries: Mistakes show encouraging hints so you can try again smoothly.\n" +
-                                        "• Weekly AI Feedback: Reviews your 7-day history with personalized next-week recommendations."
-                                    },
+                                    text = stringResource(R.string.settings_feedbacks_how_body),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     lineHeight = 19.sp
@@ -968,9 +1049,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.AutoAwesome,
                             iconTint = Color(0xFFFFD54F),
-                            title = if (isPt) "Mensagens Comemorativas de Vitória" else "Victory Celebration Dialogs",
-                            description = if (isPt) "Exibe painel festivo com estrelas ao vencer desafios e quizzes"
-                            else "Shows decorated celebration dialog when solving challenges or quizzes",
+                            title = stringResource(R.string.settings_celebration_title),
+                            description = stringResource(R.string.settings_celebration_desc),
                             checked = appGeneralSettings.showCelebrationDialogs,
                             onCheckedChange = { checked ->
                                 onUpdateAppGeneralSettings(appGeneralSettings.copy(showCelebrationDialogs = checked))
@@ -981,9 +1061,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.Favorite,
                             iconTint = Color(0xFFFF4D7D),
-                            title = if (isPt) "Incentivo Gentil ao Errar" else "Gentle Retry Encouragement",
-                            description = if (isPt) "Mostra dicas acolhedoras de \"tente novamente\" a cada erro"
-                            else "Displays supportive try-again hints whenever an answer misses",
+                            title = stringResource(R.string.settings_gentle_retry_title),
+                            description = stringResource(R.string.settings_gentle_retry_desc),
                             checked = appGeneralSettings.showGentleRetryTips,
                             onCheckedChange = { checked ->
                                 onUpdateAppGeneralSettings(appGeneralSettings.copy(showGentleRetryTips = checked))
@@ -994,9 +1073,8 @@ fun SettingsScreen(
                         SettingsToggleRow(
                             icon = Icons.Default.Star,
                             iconTint = primaryColor,
-                            title = if (isPt) "Banners Rápidos de XP e Selos" else "XP & Badge Toast Banners",
-                            description = if (isPt) "Mostra avisos flutuantes quando você ganha XP ou marcos de foco"
-                            else "Shows floating banners whenever XP or focus milestones are earned",
+                            title = stringResource(R.string.settings_xp_banners_title),
+                            description = stringResource(R.string.settings_xp_banners_desc),
                             checked = appGeneralSettings.showXpToastBanners,
                             onCheckedChange = { checked ->
                                 onUpdateAppGeneralSettings(appGeneralSettings.copy(showXpToastBanners = checked))
@@ -1016,7 +1094,7 @@ fun SettingsScreen(
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = primaryColor, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isPt) "✨ Ver Meu Feedback Semanal com IA" else "✨ Open My AI Weekly Feedback",
+                                text = stringResource(R.string.settings_open_weekly_ai_btn),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = primaryColor
@@ -1034,7 +1112,7 @@ fun SettingsScreen(
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Text(
-                                    text = if (isPt) "Enviar Sugestão ou Feedback do App" else "Send App Feedback or Suggestion",
+                                    text = stringResource(R.string.settings_send_feedback_title),
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                                 )
 
@@ -1071,7 +1149,7 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = if (isPt) "Avaliação:" else "Rating:",
+                                        text = stringResource(R.string.settings_rating_label),
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1098,7 +1176,7 @@ fun SettingsScreen(
                                     },
                                     label = {
                                         Text(
-                                            text = if (isPt) "Conte sua experiência ou sugestão..." else "Share your experience or suggestion...",
+                                            text = stringResource(R.string.settings_feedback_input_label),
                                             fontSize = 12.sp
                                         )
                                     },
@@ -1127,7 +1205,7 @@ fun SettingsScreen(
                                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (isPt) "Registrar Feedback" else "Submit Feedback",
+                                        text = stringResource(R.string.settings_submit_feedback_btn),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
                                     )
@@ -1148,8 +1226,7 @@ fun SettingsScreen(
                                             Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
-                                                text = if (isPt) "Feedback salvo com carinho! Obrigado pela contribuição 💜"
-                                                else "Feedback saved! Thank you for helping shape DevRoutine 💜",
+                                                text = stringResource(R.string.settings_feedback_saved_banner),
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold
                                             )
@@ -1159,8 +1236,7 @@ fun SettingsScreen(
 
                                 if (userFeedbackNotes.isNotEmpty()) {
                                     Text(
-                                        text = if (isPt) "Seus feedbacks recentes (${userFeedbackNotes.size})"
-                                        else "Your recent feedbacks (${userFeedbackNotes.size})",
+                                        text = stringResource(R.string.settings_recent_feedbacks, userFeedbackNotes.size),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1195,7 +1271,7 @@ fun SettingsScreen(
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Default.DeleteOutline,
-                                                        contentDescription = if (isPt) "Remover" else "Remove",
+                                                        contentDescription = stringResource(R.string.common_remove),
                                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                         modifier = Modifier.size(16.dp)
                                                     )

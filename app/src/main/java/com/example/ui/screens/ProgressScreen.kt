@@ -59,9 +59,11 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.local.UserBadgeEntity
 import com.example.model.ActivityDifficulty
 import com.example.model.Language
@@ -74,8 +76,11 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import com.example.data.repository.DailyLanguageChallengeSummary
 import com.example.data.repository.LanguageDailyProgress
+import com.example.model.LanguageTaskProgressCalculator
+import com.example.model.StudySession
 import com.example.ui.DailyScreenTimeManager
 import com.example.ui.DailyStudyGoalState
+import com.example.ui.components.LanguageTaskProgressTrackerSection
 import com.example.ui.components.WeeklyChallengesDashboardCard
 
 private val PurplePrimary: Color
@@ -92,6 +97,9 @@ fun ProgressScreen(
     todayProgressMap: Map<String, LanguageDailyProgress> = emptyMap(),
     weeklyChallengeHistory: List<DailyLanguageChallengeSummary> = emptyList(),
     dailyStudyGoalState: DailyStudyGoalState = DailyStudyGoalState(),
+    completedLessonIds: Set<String> = emptySet(),
+    sessions: List<StudySession> = emptyList(),
+    targetSubjectIds: List<String> = emptyList(),
     getTechScore: (Technology) -> Int,
     onOpenTechDetail: (Technology) -> Unit,
     onOpenWeeklyAiSummary: () -> Unit = {}
@@ -99,7 +107,24 @@ fun ProgressScreen(
     val isPt = language == Language.PT
     var selectedTimeframe by remember { mutableIntStateOf(0) } // 0 = 7 days, 1 = 30 days, 2 = All
     var showLevelRoadmapDialog by remember { mutableStateOf(false) }
-    val timeframes = if (isPt) listOf("Últimos 7 Dias", "30 Dias", "Geral") else listOf("Last 7 Days", "30 Days", "Overall")
+    val timeframes = listOf(
+        stringResource(R.string.progress_timeframe_7d),
+        stringResource(R.string.progress_timeframe_30d),
+        stringResource(R.string.progress_timeframe_overall)
+    )
+    val languageTaskSummaries = remember(
+        scoreInfo.completedActivityIds,
+        scoreInfo.completedQuizIds,
+        completedLessonIds,
+        sessions
+    ) {
+        LanguageTaskProgressCalculator.computeAll(
+            completedActivityIds = scoreInfo.completedActivityIds,
+            completedQuizIds = scoreInfo.completedQuizIds,
+            completedLessonIds = completedLessonIds,
+            sessions = sessions
+        )
+    }
 
     if (showLevelRoadmapDialog) {
         LevelRoadmapDialog(
@@ -142,14 +167,13 @@ fun ProgressScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isPt) "Visualização de Progresso" else "Progress Analytics",
+                        text = stringResource(R.string.progress_title),
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = if (isPt) "Acompanhe a evolução da sua pontuação e domínio prático ao longo do tempo em cada linguagem."
-                    else "Track your score evolution and mastery over time across each programming language and database.",
+                    text = stringResource(R.string.progress_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -176,6 +200,16 @@ fun ProgressScreen(
                     }
                 }
             }
+        }
+
+        // 0. Per-Language Visual Circular Task Progress Tracker
+        item {
+            LanguageTaskProgressTrackerSection(
+                summaries = languageTaskSummaries,
+                language = language,
+                targetSubjectIds = targetSubjectIds,
+                onOpenTech = onOpenTechDetail
+            )
         }
 
         // 0a. Live Activity-Based Screen-Time Daily Goal Card
@@ -230,11 +264,11 @@ fun ProgressScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = if (isPt) "⏱️ Meta Diária por Tempo de Tela" else "⏱️ Screen-Time Daily Goal",
+                                    text = stringResource(R.string.progress_screentime_title),
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
                                 Text(
-                                    text = if (isPt) "Contabilizado automaticamente pela atividade real" else "Auto-calculated from real user activity",
+                                    text = stringResource(R.string.progress_screentime_sub),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -257,11 +291,10 @@ fun ProgressScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = if (dailyStudyGoalState.isTimerRunning) {
-                                        if (isPt) "Ativo" else "Live"
-                                    } else {
-                                        if (isPt) "Pausado" else "Idle"
-                                    },
+                                    text = stringResource(
+                                        if (dailyStudyGoalState.isTimerRunning) R.string.home_timer_live
+                                        else R.string.home_timer_idle
+                                    ),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = statusColor
@@ -286,13 +319,19 @@ fun ProgressScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isPt) "Hoje: $formattedActive / $formattedGoal ($percent%)"
-                            else "Today: $formattedActive / $formattedGoal ($percent%)",
+                            text = stringResource(
+                                R.string.progress_screentime_today,
+                                formattedActive,
+                                formattedGoal,
+                                percent
+                            ),
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = if (isPt) "Acumulado: ${maxOf(dailyStudyGoalState.totalActiveMinutes, effectiveSeconds / 60)} min"
-                            else "Total: ${maxOf(dailyStudyGoalState.totalActiveMinutes, effectiveSeconds / 60)} min",
+                            text = stringResource(
+                                R.string.progress_screentime_total,
+                                maxOf(dailyStudyGoalState.totalActiveMinutes, effectiveSeconds / 60)
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -349,16 +388,18 @@ fun ProgressScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = if (isPt) "Nvl ${scoreInfo.levelNumber} • $levelTitle" else "Lv ${scoreInfo.levelNumber} • $levelTitle",
+                                    text = stringResource(R.string.progress_level_prefix, scoreInfo.levelNumber, levelTitle),
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
                                 )
                                 Text(
                                     text = if (scoreInfo.isMaxLevel) {
-                                        if (isPt) "Nível Máximo Alcançado (${scoreInfo.totalScore} XP)"
-                                        else "Max Level Reached (${scoreInfo.totalScore} XP)"
+                                        stringResource(R.string.progress_max_level_xp, scoreInfo.totalScore)
                                     } else {
-                                        if (isPt) "Faltam $remainingXp XP para o Nível ${scoreInfo.levelNumber + 1}"
-                                        else "$remainingXp XP left for Level ${scoreInfo.levelNumber + 1}"
+                                        stringResource(
+                                            R.string.progress_xp_left_level,
+                                            remainingXp,
+                                            scoreInfo.levelNumber + 1
+                                        )
                                     },
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -406,8 +447,7 @@ fun ProgressScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isPt) "Subir de nível restaura 25 vidas"
-                                else "Level-up restores 25 lives",
+                                text = stringResource(R.string.progress_level_restores),
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = Color(0xFFFF8FA3)
                             )
@@ -415,13 +455,13 @@ fun ProgressScreen(
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isPt) "Ver 12 Níveis" else "All 12 Ranks",
+                                text = stringResource(R.string.progress_all_ranks),
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = PurplePrimary
                             )
                             Icon(
                                 imageVector = Icons.Default.ChevronRight,
-                                contentDescription = if (isPt) "Abrir roadmap de níveis" else "Open level roadmap",
+                                contentDescription = stringResource(R.string.progress_open_roadmap_cd),
                                 tint = PurplePrimary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -456,12 +496,11 @@ fun ProgressScreen(
                     ) {
                         Column {
                             Text(
-                                text = if (isPt) "📈 Evolução de XP ao Longo do Tempo" else "📈 Score Evolution Over Time",
+                                text = stringResource(R.string.progress_xp_chart_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (isPt) "Pontuação acumulada por atividades e quizzes"
-                                else "Cumulative XP earned through practice and quizzes",
+                                text = stringResource(R.string.progress_xp_chart_sub),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -505,21 +544,20 @@ fun ProgressScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isPt) "📊 Domínio por Linguagem e Banco" else "📊 Mastery by Language & Database",
+                                text = stringResource(R.string.progress_mastery_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (isPt) "XP conquistado em cada trilha tecnológica"
-                                else "XP earned in each technology track",
+                                text = stringResource(R.string.progress_mastery_sub),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
                         Text(
-                            text = "Max: 180 XP/trilha",
+                            text = stringResource(R.string.progress_mastery_max),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -546,13 +584,12 @@ fun ProgressScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (isPt) "🎯 Atividades por Dificuldade" else "🎯 Activities by Difficulty",
+                        text = stringResource(R.string.progress_difficulty_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (isPt) "Distribuição balanceada entre os 3 níveis calibrados"
-                        else "Balanced distribution across all 3 calibrated levels",
+                        text = stringResource(R.string.progress_difficulty_sub),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -564,7 +601,7 @@ fun ProgressScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         DifficultyStatCard(
-                            title = if (isPt) "Iniciante" else "Beginner",
+                            title = stringResource(R.string.progress_difficulty_beginner),
                             points = "30 XP",
                             color = Color(0xFF2E7D32),
                             completedCount = (scoreInfo.completedActivitiesCount / 3).coerceAtLeast(0),
@@ -572,7 +609,7 @@ fun ProgressScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         DifficultyStatCard(
-                            title = if (isPt) "Intermediário" else "Intermediate",
+                            title = stringResource(R.string.progress_difficulty_intermediate),
                             points = "60 XP",
                             color = Color(0xFFE65100),
                             completedCount = (scoreInfo.completedActivitiesCount / 3).coerceAtLeast(0),
@@ -580,7 +617,7 @@ fun ProgressScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         DifficultyStatCard(
-                            title = if (isPt) "Avançado" else "Advanced",
+                            title = stringResource(R.string.progress_difficulty_advanced),
                             points = "90 XP",
                             color = Color(0xFFC2185B),
                             completedCount = (scoreInfo.completedActivitiesCount / 3).coerceAtLeast(0),
@@ -600,13 +637,12 @@ fun ProgressScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = if (isPt) "🔥 Registro Diário no Cloud Firestore" else "🔥 Daily Cloud Firestore Record",
+                        text = stringResource(R.string.progress_firestore_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (isPt) "Progresso salvo na nuvem por linguagem selecionada hoje"
-                        else "Cloud-persisted progress per selected language today",
+                        text = stringResource(R.string.progress_firestore_sub),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

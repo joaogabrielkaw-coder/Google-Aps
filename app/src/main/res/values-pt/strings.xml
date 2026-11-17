@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DevRoutine AI</string>
+    <string name="app_topbar_subtitle">Python • SQL • Java &amp; DBs</string>
+
+    <!-- Navegação & Barra Superior -->
+    <string name="nav_home">Início</string>
+    <string name="nav_techs">Cursos</string>
+    <string name="nav_progress">Progresso</string>
+    <string name="nav_calendar">Agenda</string>
+    <string name="nav_ai">Dev Tutor</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_chat_live_desc">Chat e Live</string>
+
+    <string name="action_community_chat">Chat e Ligações</string>
+    <string name="action_leaderboard">Placar de Desenvolvedores</string>
+    <string name="action_sign_in_profile">Entrar / Perfil</string>
+    <string name="action_settings">Configurações</string>
+    <string name="action_toggle_language">Alternar idioma (PT / EN)</string>
+    <string name="common_copy_code">Copiar Código</string>
+    <string name="common_back">Voltar</string>
+    <string name="common_remove">Remover</string>
+    <string name="common_clear">Limpar</string>
+    <string name="common_all">Todas</string>
+    <string name="common_practice">Estudar</string>
+    <string name="common_tasks">tarefas</string>
+    <string name="common_lessons">Aulas</string>
+    <string name="common_challenges">Desafios</string>
+    <string name="common_quiz">Quiz</string>
+    <string name="common_sessions">Agenda</string>
+    <string name="common_days_count">%1$d dias</string>
+    <string name="common_today">hoje</string>
+    <string name="common_target_badge">Foco</string>
+
+    <!-- Identificadores de Idioma & Alternância -->
+    <string name="lang_short_pt">PT-BR</string>
+    <string name="lang_short_en">EN-US</string>
+    <string name="lang_chip_pt">PT</string>
+    <string name="lang_chip_en">EN</string>
+    <string name="lang_name_pt">Português (Brasil)</string>
+    <string name="lang_name_en">Inglês</string>
+    <string name="lang_switched_feedback">Idioma alterado para %1$s</string>
+
+    <!-- Tela de Login -->
+    <string name="login_hero_title">Seu Ecossistema Dev</string>
+    <string name="login_hero_subtitle">Pratique 1.260+ desafios, suba no ranking global com Cloud Firestore e impulsione seus estudos com IA.</string>
+    <string name="login_feature_challenges_title">1.260+ Desafios Práticos Balanceados</string>
+    <string name="login_feature_challenges_desc">35 Iniciante, 35 Intermediário e 35 Avançado para todas as 12 tecnologias.</string>
+    <string name="login_feature_leaderboard_title">Placar de Líderes em Tempo Real</string>
+    <string name="login_feature_leaderboard_desc">Sincronização na nuvem com XP, níveis e distintivos exclusivos.</string>
+    <string name="login_feature_firestore_title">Progresso Diário no Cloud Firestore</string>
+    <string name="login_feature_firestore_desc">Acompanhe seus estudos diários com segurança garantida.</string>
+    <string name="login_error_missing_google_config">Configuração do Google Sign-In não encontrada no projeto.</string>
+    <string name="login_error_unexpected_credential">Tipo de credencial inválido</string>
+    <string name="login_error_auth_failed">Falha na autenticação</string>
+    <string name="login_signing_in">Autenticando…</string>
+    <string name="login_sign_in_google">Entrar com o Google</string>
+    <string name="login_phone_toggle">Ou registrar perfil com telefone</string>
+    <string name="login_phone_card_title">Cadastro Rápido com Telefone</string>
+    <string name="login_phone_name_label">Seu Nome ou Apelido Dev</string>
+    <string name="login_phone_number_label">Número com DDD (ex: 11999998888)</string>
+    <string name="login_phone_invalid_error">Digite um número de telefone válido</string>
+    <string name="login_phone_enter_btn">Entrar com Telefone</string>
+    <string name="login_or">ou</string>
+    <string name="login_guest_continue">Explorar primeiro (Modo Visitante)</string>
+    <string name="login_security_note">Autenticação protegida por Firebase Auth &amp; App Check</string>
+
+    <!-- Tela Inicial (Home) -->
+    <string name="home_level_short">Nvl %1$d</string>
+    <string name="home_streak_cd">Ofensiva</string>
+    <string name="home_max_level_reached">Nível Máximo Alcançado!</string>
+    <string name="home_xp_left_next_level">Faltam %1$d XP para o Nvl %2$d</string>
+    <string name="home_level_restores_lives">❤️ Subir de nível restaura 25 vidas</string>
+    <string name="home_view_ranks">Ver Níveis</string>
+    <string name="home_view_ranks_cd">Ver sistema de níveis</string>
+    <string name="home_today_total_timer">Hoje: %1$s • Total: %2$dm</string>
+    <string name="home_timer_live">Ativo</string>
+    <string name="home_timer_idle">Em pausa</string>
+    <string name="home_diagnostic_title">🎯 Diagnóstico Inicial Dev (Opcional)</string>
+    <string name="home_diagnostic_desc">✨ Não é obrigatório • Toque aqui quando desejar definir seu nível e ganhar título + medalha!</string>
+    <string name="home_stat_total_xp">XP Acumulado</string>
+    <string name="home_stat_activities_done">Atividades Feitas</string>
+    <string name="home_stat_quizzes_solved">Quizzes Acertados</string>
+
+    <string name="home_lab_3d_game">Jogo &amp; 3D</string>
+    <string name="home_lab_sql_db">Banco SQL</string>
+    <string name="home_lab_voice_ai">Voz &amp; IA</string>
+    <string name="home_lab_themes">Cores</string>
+
+    <string name="home_store_title">Loja de Materiais de Estudo</string>
+    <string name="home_store_subtitle">Kits de Algoritmos, SQL Mestre e Entrevistas Backend • Google Play</string>
+    <string name="home_store_action">Abrir</string>
+
+    <string name="home_idles_title">IDLEs de Programação (12)</string>
+    <string name="home_idles_subtitle">Editor com syntax highlight e execução para Python, JS, TS, Kotlin, Java, Go, SQL e Web</string>
+    <string name="home_idles_badge">IDLE</string>
+
+    <string name="home_leaderboard_title">Placar de Desenvolvedores</string>
+    <string name="home_leaderboard_subtitle">Veja o ranking online, entre com Google/Telefone e salve seus pontos</string>
+    <string name="home_chat_title">Chat, Arquivos &amp; Ligações</string>
+    <string name="home_chat_pending_requests">%1$d solicitação(ões) pendente(s) para aceitar</string>
+    <string name="home_chat_subtitle">Pesquise usuários, envie fotos, vídeos, arquivos e faça ligações</string>
+    <string name="home_chat_open_cd">Abrir Chat e Ligações</string>
+
+    <string name="home_calendar_title">Calendário de Estudos</string>
+    <string name="home_prev_month_cd">Mês anterior</string>
+    <string name="home_next_month_cd">Próximo mês</string>
+    <string name="home_sessions_for">Sessões de %1$s • %2$s</string>
+    <string name="home_sessions_on">Sessões em %1$s</string>
+    <string name="home_sessions_completed_ratio">%1$d/%2$d concluídas</string>
+    <string name="home_no_sessions_for_tech">Nenhuma sessão de %1$s para hoje.</string>
+    <string name="home_no_sessions_day">Nenhuma sessão agendada para este dia.</string>
+    <string name="home_schedule_btn">Agendar</string>
+
+    <string name="home_routines_title">Rotinas de Estudo Salvas</string>
+    <string name="home_routines_for_tech">Rotinas de %1$s</string>
+    <string name="home_routines_empty_tech">Nenhuma rotina contendo %1$s salva no banco.</string>
+    <string name="home_routines_empty">Nenhuma rotina salva ainda no banco de dados.</string>
+    <string name="home_routines_create_ai_tech">Criar Rotina de %1$s com IA</string>
+    <string name="home_routines_create_ai">Gerar Rotina com IA</string>
+    <string name="home_new_routine_btn">+ Nova Rotina</string>
+    <string name="home_routine_duration">%1$d dias • %2$d min/dia</string>
+    <string name="home_routine_sessions_done">%1$d de %2$d sessões feitas</string>
+    <string name="home_routine_calendar_btn">Calendário</string>
+    <string name="home_routine_ai_btn">Praticar IA</string>
+
+    <string name="home_filter_title">Filtrar por Linguagem</string>
+    <string name="home_filter_subtitle">Foque nas rotinas das linguagens que deseja praticar hoje</string>
+    <string name="home_filter_showing_for">Exibindo rotinas de %1$s</string>
+    <string name="home_filter_counts">%1$d sessões • %2$d rotinas</string>
+
+    <string name="home_daily_progress_title">Progresso Diário de Estudos</string>
+    <string name="home_daily_progress_goal_sub">Meta: %1$d min • Calculada pelo cronômetro ativo</string>
+    <string name="home_daily_goal_reached">🎉 Meta Atingida!</string>
+    <string name="home_daily_goal_percent">%1$d%% concluído</string>
+    <string name="home_daily_timer_running">Cronômetro de atividade em execução</string>
+    <string name="home_daily_timer_paused">Pausado por inatividade (interaja para retomar)</string>
+    <string name="home_daily_minutes_ratio">%1$d de %2$d min ativos</string>
+    <string name="home_daily_great_consistency">Excelente consistência! 🔥</string>
+    <string name="home_daily_remaining_today">Faltam %1$dm %2$ds hoje</string>
+    <string name="home_metric_active_time">Tempo Ativo</string>
+    <string name="home_metric_live">ao vivo agora</string>
+    <string name="home_metric_paused">em pausa</string>
+    <string name="home_metric_activities">Atividades</string>
+    <string name="home_metric_challenges_quiz">desafios/quiz</string>
+    <string name="home_metric_xp_today">XP Hoje</string>
+    <string name="home_metric_points">pontos</string>
+    <string name="home_practiced_today">Linguagens praticadas hoje:</string>
+    <string name="home_daily_auto_notice">Meta contabilizada automaticamente pelo tempo de uso no app.</string>
+    <string name="home_weekly_ai_summary_btn">✨ Resumo Semanal com IA (Feedback de 7 dias)</string>
+
+    <string name="home_ai_suggestions_title">Tópicos Sugeridos pela IA</string>
+    <string name="home_ai_suggestions_sub">Recomendações para nível %1$s</string>
+    <string name="home_ai_filter_sql_db">SQL &amp; Bancos</string>
+    <string name="home_practice_with_ai">Praticar com AI</string>
+    <string name="home_view_challenges">Ver Desafios</string>
+
+    <string name="home_target_subjects_title">Matérias de Foco</string>
+    <string name="home_target_subjects_empty">Escolha suas matérias e salve na nuvem</string>
+    <string name="home_target_subjects_count">%1$d matérias selecionadas no seu plano</string>
+    <string name="home_target_select">Escolher</string>
+    <string name="home_target_edit">Editar</string>
+
+    <string name="home_learning_tracks_title">Trilhas de Aprendizado (%1$d)</string>
+    <string name="home_learning_tracks_sub">Grade de tecnologias suportadas</string>
+    <string name="home_learning_tracks_view_all">Ver todas</string>
+
+    <!-- Rastreador Circular de Tarefas por Linguagem -->
+    <string name="tracker_section_title">Progresso de Tarefas por Linguagem</string>
+    <string name="tracker_section_subtitle">%1$d de %2$d tarefas concluídas • %3$d/12 iniciadas</string>
+    <string name="tracker_overall_name">Geral</string>
+    <string name="tracker_filter_all">Todas (%1$d)</string>
+    <string name="tracker_filter_started">Iniciadas (%1$d)</string>
+    <string name="tracker_filter_target">Foco</string>
+    <string name="tracker_filter_languages">Linguagens</string>
+    <string name="tracker_filter_databases">Bancos</string>
+    <string name="tracker_empty_title">Nenhuma tarefa concluída neste filtro ainda.</string>
+    <string name="tracker_empty_desc">Conclua uma aula, desafio prático ou quiz em qualquer linguagem para acompanhar o anel evoluir.</string>
+    <string name="tracker_empty_cta">Praticar Python</string>
+    <string name="tracker_card_tasks_ratio">%1$d / %2$d tarefas</string>
+    <string name="tracker_breakdown_cd">Detalhes das tarefas</string>
+    <string name="tracker_home_title">Progresso por Linguagem</string>
+    <string name="tracker_home_subtitle">%1$d/%2$d tarefas de estudo (%3$d%%)</string>
+    <string name="tracker_home_analytics">Ver tudo</string>
+
+    <!-- Tela de Progresso -->
+    <string name="progress_title">Visualização de Progresso</string>
+    <string name="progress_subtitle">Acompanhe a evolução da sua pontuação e domínio prático ao longo do tempo em cada linguagem.</string>
+    <string name="progress_timeframe_7d">Últimos 7 Dias</string>
+    <string name="progress_timeframe_30d">30 Dias</string>
+    <string name="progress_timeframe_overall">Geral</string>
+    <string name="progress_screentime_title">⏱️ Meta Diária por Tempo de Tela</string>
+    <string name="progress_screentime_sub">Contabilizado automaticamente pela atividade real</string>
+    <string name="progress_screentime_today">Hoje: %1$s / %2$s (%3$d%%)</string>
+    <string name="progress_screentime_total">Acumulado: %1$d min</string>
+    <string name="progress_level_prefix">Nvl %1$d • %2$s</string>
+    <string name="progress_max_level_xp">Nível Máximo Alcançado (%1$d XP)</string>
+    <string name="progress_xp_left_level">Faltam %1$d XP para o Nível %2$d</string>
+    <string name="progress_level_restores">Subir de nível restaura 25 vidas</string>
+    <string name="progress_all_ranks">Ver 12 Níveis</string>
+    <string name="progress_open_roadmap_cd">Abrir roadmap de níveis</string>
+    <string name="progress_xp_chart_title">📈 Evolução de XP ao Longo do Tempo</string>
+    <string name="progress_xp_chart_sub">Pontuação acumulada por atividades e quizzes</string>
+    <string name="progress_mastery_title">📊 Domínio por Linguagem e Banco</string>
+    <string name="progress_mastery_sub">XP conquistado em cada trilha tecnológica</string>
+    <string name="progress_mastery_max">Max: 180 XP/trilha</string>
+    <string name="progress_difficulty_title">🎯 Atividades por Dificuldade</string>
+    <string name="progress_difficulty_sub">Distribuição balanceada entre os 3 níveis calibrados</string>
+    <string name="progress_difficulty_beginner">Iniciante</string>
+    <string name="progress_difficulty_intermediate">Intermediário</string>
+    <string name="progress_difficulty_advanced">Avançado</string>
+    <string name="progress_firestore_title">🔥 Registro Diário no Cloud Firestore</string>
+    <string name="progress_firestore_sub">Progresso salvo na nuvem por linguagem selecionada hoje</string>
+
+    <!-- Hub de Trilhas de Estudo -->
+    <string name="tech_hub_title">Trilhas de Estudo</string>
+    <string name="tech_hub_subtitle">Selecione uma tecnologia para ver o resumo, atividades práticas, código, roteiro e teste prático com pontuação.</string>
+    <string name="tech_hub_store_btn">Loja</string>
+    <string name="tech_hub_focus_btn">Foco</string>
+    <string name="tech_hub_cat_target">Foco (%1$d)</string>
+    <string name="tech_hub_cat_all">Todas (%1$d)</string>
+    <string name="tech_hub_cat_lang_web">Linguagens &amp; Web (%1$d)</string>
+    <string name="tech_hub_cat_db">Bancos de Dados (%1$d)</string>
+
+    <!-- Tela de IDLEs -->
+    <string name="idle_screen_title">IDLEs por Linguagem</string>
+    <string name="idle_screen_subtitle">Editor e execução dedicada para todas as 12 linguagens</string>
+    <string name="idle_badge_count">12 IDLEs</string>
+
+    <!-- Central de Configurações -->
+    <string name="settings_title">Central de Configurações</string>
+    <string name="settings_subtitle">Acessibilidade, idioma localizado, tema e feedbacks em um só lugar</string>
+    <string name="settings_lang_card_title">Idioma do Aplicativo</string>
+    <string name="settings_lang_card_subtitle">Alterne dinamicamente entre Português e Inglês usando os arquivos de recursos localizados do Android</string>
+    <string name="settings_lang_toggle_label">Usar Inglês (EN-US)</string>
+    <string name="settings_lang_toggle_desc">Ative para Inglês (`values/strings.xml`) ou desative para Português (`values-pt/strings.xml`)</string>
+    <string name="settings_lang_live_preview">Prévia ao vivo: Suas abas, menus e botões são atualizados na hora sem reiniciar o app.</string>
+    <string name="settings_lang_active_res_badge">Recurso ativo: res/values-pt/strings.xml (pt)</string>
+
+    <string name="settings_accessibility_title">Acessibilidade</string>
+    <string name="settings_accessibility_subtitle">Ajuste leitura, contraste e conforto visual ao seu estilo</string>
+    <string name="settings_text_size">Tamanho do Texto</string>
+    <string name="settings_text_size_preview">Prévia: Aprender código todos os dias fica ainda mais confortável!</string>
+    <string name="settings_high_contrast_title">Alto Contraste nas Bordas</string>
+    <string name="settings_high_contrast_desc">Reforça contornos de cartões e botões para melhor leitura</string>
+    <string name="settings_reduce_motion_title">Reduzir Animações</string>
+    <string name="settings_reduce_motion_desc">Suaviza brilhos contínuos e animações de pulsação</string>
+    <string name="settings_haptic_title">Resposta Tátil (Vibração)</string>
+    <string name="settings_haptic_desc">Vibração leve e amigável ao interagir com botões e quizzes</string>
+    <string name="settings_reset_accessibility">Restaurar Acessibilidade Padrão</string>
+    <string name="settings_accessibility_reset_feedback">♿ Acessibilidade restaurada para o padrão.</string>
+
+    <string name="settings_theme_title">Opções de Tema &amp; Cores</string>
+    <string name="settings_theme_synced">Salvo na conta e neste dispositivo</string>
+    <string name="settings_theme_local">Salvo localmente neste dispositivo</string>
+    <string name="settings_theme_dark">Escuro</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_active_palette">Paleta Atual</string>
+    <string name="settings_default_palette">Roxo &amp; Carmesim (Padrão Principal)</string>
+    <string name="settings_custom_palette">Customizada (%1$s)</string>
+    <string name="settings_preset_palettes">Temas Prontos (Escolha Rápida)</string>
+    <string name="settings_full_palette_btn">Paleta Completa &amp; Customizar</string>
+    <string name="settings_reset_btn">Padrão</string>
+
+    <string name="settings_general_title">Configuração Geral do Aplicativo</string>
+    <string name="settings_general_subtitle">Perfil, idioma, notificações e comportamento do cronômetro</string>
+    <string name="settings_default_dev_name">Desenvolvedor</string>
+    <string name="settings_default_dev_level">Aspirante a Dev</string>
+    <string name="settings_photo_btn">Foto</string>
+    <string name="settings_redo_diagnostic_btn">Diagnóstico Inicial Dev (Opcional • 5 Desafios)</string>
+    <string name="settings_target_subjects_count">Matérias de Foco (%1$d selecionadas)</string>
+    <string name="settings_target_subjects_choose">Escolher Matérias de Foco (Firestore)</string>
+    <string name="settings_idle_pause_title">Pausa Automática do Cronômetro por Inatividade</string>
+    <string name="settings_idle_pause_desc">Pausa o tempo de estudo automaticamente se não houver interação por:</string>
+    <string name="settings_idle_min_default">%1$d min (Padrão)</string>
+    <string name="settings_idle_min">%1$d min</string>
+    <string name="settings_daily_reminders_title">Lembretes Diários (WorkManager)</string>
+    <string name="settings_daily_reminders_desc">Notificações locais 15 min antes das rotinas agendadas no Calendário</string>
+    <string name="settings_test_notification_btn">Disparar Notificação de Teste</string>
+
+    <string name="settings_covered_techs_title">Tecnologias &amp; Recursos Inclusos</string>
+    <string name="settings_covered_techs_body">• Linguagens &amp; Web: Python, SQL, HTML, CSS, Java, JavaScript, TypeScript, Kotlin, Go\n• Bancos de Dados: MySQL, PostgreSQL, MongoDB &amp; SQLite Studio\n• Inteligência Artificial: DevTutor AI, Resumo Semanal &amp; Transcrição de Voz\n• Notificações Locais: WorkManager (Jetpack)</string>
+
+    <string name="settings_feedbacks_title">Sobre os Feedbacks</string>
+    <string name="settings_feedbacks_subtitle">Entenda e personalize como o app celebra conquistas, acolhe erros e gera análises</string>
+    <string name="settings_feedbacks_how_title">Como funcionam os feedbacks no DevRoutine?</string>
+    <string name="settings_feedbacks_how_body">• Vitórias: Cada desafio ou quiz concluído exibe uma mensagem comemorativa com XP e preservação das suas 25 vidas diárias.\n• Erros com carinho: Ao errar, você recebe uma dica gentil para tentar novamente sem desânimo.\n• Resumo Semanal com IA: Analisa seus últimos 7 dias e cria um plano de estudos personalizado.</string>
+    <string name="settings_celebration_title">Mensagens Comemorativas de Vitória</string>
+    <string name="settings_celebration_desc">Exibe painel festivo com estrelas ao vencer desafios e quizzes</string>
+    <string name="settings_gentle_retry_title">Incentivo Gentil ao Errar</string>
+    <string name="settings_gentle_retry_desc">Mostra dicas acolhedoras de \"tente novamente\" a cada erro</string>
+    <string name="settings_xp_banners_title">Banners Rápidos de XP e Selos</string>
+    <string name="settings_xp_banners_desc">Mostra avisos flutuantes quando você ganha XP ou marcos de foco</string>
+    <string name="settings_open_weekly_ai_btn">✨ Ver Meu Feedback Semanal com IA</string>
+    <string name="settings_send_feedback_title">Enviar Sugestão ou Feedback do App</string>
+    <string name="settings_rating_label">Avaliação:</string>
+    <string name="settings_feedback_input_label">Conte sua experiência ou sugestão…</string>
+    <string name="settings_submit_feedback_btn">Registrar Feedback</string>
+    <string name="settings_feedback_saved_banner">Feedback salvo com carinho! Obrigado pela contribuição 💜</string>
+    <string name="settings_recent_feedbacks">Seus feedbacks recentes (%1$d)</string>
+</resources>

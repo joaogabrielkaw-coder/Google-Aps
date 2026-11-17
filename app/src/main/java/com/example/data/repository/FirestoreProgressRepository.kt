@@ -175,7 +175,7 @@ class FirestoreProgressRepository(private val context: Context) {
 
     /**
      * Contabiliza automaticamente 1 minuto real de tempo de uso ativo no app para a tecnologia em foco.
-     * Não concede XP arbitrário manual (apenas atualiza o tempo real de tela).
+     * Não concede XP arbitrário manual (apenas atualiza o tempo real de tela e o acumulado por matéria).
      */
     suspend fun recordRealScreenTimeMinute(
         userId: String,
@@ -184,6 +184,11 @@ class FirestoreProgressRepository(private val context: Context) {
         val todayIso = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         val currentLocal = getLocalProgress(todayIso, tech.id)
         val newMinutes = currentLocal.minutesStudied + 1
+
+        val cumulativeKey = "total_tech_minutes_${tech.id}"
+        val previousCumulative = maxOf(prefs.getInt(cumulativeKey, 0), currentLocal.minutesStudied)
+        val newCumulative = previousCumulative + 1
+        prefs.edit().putInt(cumulativeKey, newCumulative).apply()
 
         saveLocalProgress(
             todayIso = todayIso,
@@ -218,6 +223,37 @@ class FirestoreProgressRepository(private val context: Context) {
             Log.e(TAG, "Error recording real screen time minute to Firestore: ${e.message}", e)
             false
         }
+    }
+
+    /**
+     * Retorna os minutos acumulados de estudo ativo por tecnologia para conquistas de horas por matéria.
+     */
+    fun getCumulativeTechMinutesMap(): Map<Technology, Int> {
+        val todayIso = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        return Technology.entries.associateWith { tech ->
+            val savedCumulative = prefs.getInt("total_tech_minutes_${tech.id}", 0)
+            val todayMinutes = getLocalProgress(todayIso, tech.id).minutesStudied
+            maxOf(savedCumulative, todayMinutes)
+        }
+    }
+
+    /**
+     * Mescla minutos acumulados por tecnologia restaurados do Cloud Firestore.
+     */
+    fun mergeRemoteTechMinutes(remoteTechMinutes: Map<*, *>) {
+        if (remoteTechMinutes.isEmpty()) return
+        val editor = prefs.edit()
+        remoteTechMinutes.forEach { (key, value) ->
+            val techId = key?.toString()?.trim().orEmpty()
+            val remoteMins = (value as? Number)?.toInt() ?: 0
+            if (techId.isNotBlank() && remoteMins > 0) {
+                val localMins = prefs.getInt("total_tech_minutes_$techId", 0)
+                if (remoteMins > localMins) {
+                    editor.putInt("total_tech_minutes_$techId", remoteMins)
+                }
+            }
+        }
+        editor.apply()
     }
 
     /**

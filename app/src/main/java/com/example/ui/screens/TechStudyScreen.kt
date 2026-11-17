@@ -23,8 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -38,19 +40,32 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.lazy.LazyRow
+import com.example.model.IdleExecutionResult
+import com.example.model.LanguageIdleCatalog
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.TrackChanges
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WorkspacePremium
+import com.example.ui.components.LanguageIdleWorkspace
 import com.example.data.local.UserBadgeEntity
+import com.example.model.LifePurchaseResult
+import com.example.model.LifeShopPackage
+import com.example.model.ModerateAdCatalog
 import com.example.ui.DailyLivesInfo
 import com.example.ui.components.BadgeDetailDialog
+import com.example.ui.components.CourseModulesAndVideosTab
+import com.example.ui.components.CourseOverviewQuickReferencesCard
 import com.example.ui.components.DailyLivesInfoDialog
 import com.example.ui.components.DailyLivesPill
 import com.example.ui.components.DailySealMedallionTile
 import com.example.ui.components.DailySealTier
 import com.example.ui.components.GentleRetryFeedbackDialog
+import com.example.ui.components.ModerateInlineAdBanner
 import com.example.ui.components.OutOfLivesDialog
 import com.example.ui.components.VictoryCelebrationDialog
 import androidx.compose.material3.Button
@@ -94,21 +109,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.repository.TechContentRepository
 import com.example.model.ActivityDifficulty
 import com.example.model.AppGeneralSettings
 import com.example.model.Language
+import com.example.model.LanguageTaskProgressCalculator
+import com.example.model.LanguageTaskProgressSummary
 import com.example.model.PracticalActivity
 import com.example.model.QuizQuestion
 import com.example.model.RoadmapStep
+import com.example.model.StudySession
 import com.example.model.Technology
 import com.example.model.UserScoreInfo
 import com.example.ui.components.CodeSnippetCard
+import com.example.ui.components.TechCircularProgressBadge
 import com.example.ui.theme.LocalAccessibilitySettings
 import com.example.ui.theme.LocalDevRoutineColors
 import kotlinx.coroutines.delay
@@ -122,11 +143,35 @@ private val RedAccent: Color
 @Composable
 fun TechHubScreen(
     language: Language,
+    isProSubscriber: Boolean = false,
+    onOpenProSubscription: () -> Unit = {},
+    targetSubjectIds: List<String> = emptyList(),
+    scoreInfo: UserScoreInfo = UserScoreInfo(),
+    completedLessonIds: Set<String> = emptySet(),
+    sessions: List<StudySession> = emptyList(),
+    onOpenTargetSubjects: () -> Unit = {},
+    onOpenStudyStore: () -> Unit = {},
     onSelectTech: (Technology) -> Unit
 ) {
     val isPt = language == Language.PT
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
     val allTechs = Technology.entries
+    val summaryByTech = remember(
+        scoreInfo.completedActivityIds,
+        scoreInfo.completedQuizIds,
+        completedLessonIds,
+        sessions
+    ) {
+        LanguageTaskProgressCalculator.computeAll(
+            completedActivityIds = scoreInfo.completedActivityIds,
+            completedQuizIds = scoreInfo.completedQuizIds,
+            completedLessonIds = completedLessonIds,
+            sessions = sessions
+        ).associateBy { it.tech }
+    }
+    val targetTechs = remember(targetSubjectIds) {
+        allTechs.filter { it.id in targetSubjectIds }
+    }
     val langWebTechs = listOf(
         Technology.JAVASCRIPT,
         Technology.TYPESCRIPT,
@@ -144,19 +189,26 @@ fun TechHubScreen(
         Technology.MONGODB
     )
 
-    val categories = if (isPt) listOf(
-        "Todas (${allTechs.size})",
-        "Linguagens & Web (${langWebTechs.size})",
-        "Bancos de Dados (${dbTechs.size})"
-    ) else listOf(
-        "All (${allTechs.size})",
-        "Languages & Web (${langWebTechs.size})",
-        "Databases (${dbTechs.size})"
-    )
+    val targetCatLabel = stringResource(R.string.tech_hub_cat_target, targetTechs.size)
+    val allCatLabel = stringResource(R.string.tech_hub_cat_all, allTechs.size)
+    val langWebCatLabel = stringResource(R.string.tech_hub_cat_lang_web, langWebTechs.size)
+    val dbCatLabel = stringResource(R.string.tech_hub_cat_db, dbTechs.size)
 
-    val filteredTechs = when (selectedCategoryIndex) {
-        1 -> langWebTechs
-        2 -> dbTechs
+    val categories = buildList {
+        if (targetTechs.isNotEmpty()) {
+            add(targetCatLabel)
+        }
+        add(allCatLabel)
+        add(langWebCatLabel)
+        add(dbCatLabel)
+    }
+
+    val safeIndex = selectedCategoryIndex.coerceIn(0, categories.lastIndex)
+    val offset = if (targetTechs.isNotEmpty()) 1 else 0
+    val filteredTechs = when {
+        targetTechs.isNotEmpty() && safeIndex == 0 -> targetTechs
+        safeIndex - offset == 1 -> langWebTechs
+        safeIndex - offset == 2 -> dbTechs
         else -> allTechs
     }
 
@@ -165,16 +217,80 @@ fun TechHubScreen(
             .fillMaxSize()
             .testTag("screen_tech_hub")
     ) {
-        // Title & Description
+        // Title & Description + Target Subjects Entry
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = if (isPt) "Trilhas de Estudo" else "Study Tracks",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.tech_hub_title),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.weight(1f)
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFF16A34A).copy(alpha = 0.16f),
+                        border = BorderStroke(1.dp, Color(0xFF16A34A).copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onOpenStudyStore() }
+                            .testTag("btn_hub_study_store")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingCart,
+                                contentDescription = null,
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.tech_hub_store_btn),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF16A34A)
+                            )
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onOpenTargetSubjects() }
+                            .testTag("btn_hub_target_subjects")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.TrackChanges,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.tech_hub_focus_btn),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = if (isPt) "Selecione uma tecnologia para ver o resumo, atividades práticas, código, roteiro e teste prático com pontuação."
-                else "Select a technology to explore guides, hands-on practice, cheatsheets, roadmap, and scored quizzes.",
+                text = stringResource(R.string.tech_hub_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -182,9 +298,9 @@ fun TechHubScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Category filter chips
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.forEachIndexed { index, title ->
-                    val isSelected = selectedCategoryIndex == index
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                itemsIndexed(categories) { index, title ->
+                    val isSelected = safeIndex == index
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
@@ -214,8 +330,22 @@ fun TechHubScreen(
                 TechListItemCard(
                     tech = tech,
                     language = language,
+                    isTargetSubject = tech.id in targetSubjectIds,
+                    taskProgressSummary = summaryByTech[tech],
                     onClick = { onSelectTech(tech) }
                 )
+            }
+
+            if (!isProSubscriber) {
+                item {
+                    ModerateInlineAdBanner(
+                        ad = ModerateAdCatalog.pickForSlot(2),
+                        language = language,
+                        isProSubscriber = isProSubscriber,
+                        onUpgradeProClick = onOpenProSubscription,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                    )
+                }
             }
         }
     }
@@ -225,6 +355,8 @@ fun TechHubScreen(
 fun TechListItemCard(
     tech: Technology,
     language: Language,
+    isTargetSubject: Boolean = false,
+    taskProgressSummary: LanguageTaskProgressSummary? = null,
     onClick: () -> Unit
 ) {
     val isPt = language == Language.PT
@@ -282,6 +414,22 @@ fun TechListItemCard(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                    if (isTargetSubject) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.common_target_badge),
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -294,6 +442,14 @@ fun TechListItemCard(
                     text = if (isPt) tech.shortDescPt else tech.shortDescEn,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (taskProgressSummary != null) {
+                Spacer(modifier = Modifier.width(12.dp))
+                TechCircularProgressBadge(
+                    summary = taskProgressSummary,
+                    language = language
                 )
             }
         }
@@ -317,21 +473,35 @@ fun TechDetailScreen(
     badges: List<UserBadgeEntity> = emptyList(),
     dailyLives: DailyLivesInfo = DailyLivesInfo(),
     appGeneralSettings: AppGeneralSettings = AppGeneralSettings(),
-    onConsumeLife: () -> Boolean = { true }
+    onConsumeLife: () -> Boolean = { true },
+    availableShopXp: Int = 0,
+    availableGameCrystals: Int = 0,
+    onPurchaseLives: (LifeShopPackage) -> LifePurchaseResult? = { null },
+    onOpenLifeShop: () -> Unit = {},
+    onOpen3DGame: (() -> Unit)? = null,
+    completedLessonIds: Set<String> = emptySet(),
+    onToggleLessonCompleted: (Technology, String) -> Unit = { _, _ -> },
+    idleCode: String = LanguageIdleCatalog.getSpec(tech).templates.first().code,
+    idleResult: IdleExecutionResult? = null,
+    onUpdateIdleCode: (String) -> Unit = {},
+    onRunIdleCode: () -> Unit = {},
+    onResetIdleCode: () -> Unit = {},
+    onClearIdleOutput: () -> Unit = {},
+    onOpenFullIdleHub: (() -> Unit)? = null
 ) {
     val isPt = language == Language.PT
     val haptic = LocalHapticFeedback.current
     val hapticEnabled = LocalAccessibilitySettings.current.hapticFeedbackEnabled
-    var selectedTabIndex by remember { mutableIntStateOf(1) } // Default to Hands-on Practice tab
+    var selectedTabIndex by remember { mutableIntStateOf(1) } // Default to Modules & Videos tab
     var showLivesInfoDialog by remember { mutableStateOf(false) }
     var showOutOfLivesDialog by remember { mutableStateOf(false) }
     var victoryData by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var gentleRetryHint by remember { mutableStateOf<String?>(null) }
 
     val tabTitles = if (isPt) {
-        listOf("Visão Geral", "Atividades Práticas", "Quiz com Pontos", "Cheatsheet", "Roadmap")
+        listOf("Visão Geral", "Módulos & Vídeos", "Atividades Práticas", "Quiz com Pontos", "Cheatsheet", "Roadmap", "IDLE")
     } else {
-        listOf("Overview", "Hands-on Practice", "Scored Quiz", "Cheatsheet", "Roadmap")
+        listOf("Overview", "Modules & Videos", "Hands-on Practice", "Scored Quiz", "Cheatsheet", "Roadmap", "IDLE")
     }
 
     // Auto-dismiss floating score feedback after 3 seconds
@@ -382,7 +552,8 @@ fun TechDetailScreen(
                         ) {
                             DailyLivesPill(
                                 livesInfo = dailyLives,
-                                onClick = { showLivesInfoDialog = true }
+                                onClick = { showLivesInfoDialog = true },
+                                onAddLivesClick = onOpenLifeShop
                             )
 
                             // Technology XP Chip
@@ -485,8 +656,20 @@ fun TechDetailScreen(
 
                 // Tab Content
                 when (selectedTabIndex) {
-                    0 -> TechOverviewTab(tech, isPt)
-                    1 -> TechPracticalActivitiesTab(
+                    0 -> TechOverviewTab(
+                        tech = tech,
+                        language = language,
+                        completedLessonIds = completedLessonIds,
+                        onOpenModulesTab = { selectedTabIndex = 1 }
+                    )
+                    1 -> CourseModulesAndVideosTab(
+                        tech = tech,
+                        language = language,
+                        completedLessonIds = completedLessonIds,
+                        onToggleLessonCompleted = { lessonId -> onToggleLessonCompleted(tech, lessonId) },
+                        onJumpToPractice = { selectedTabIndex = 2 }
+                    )
+                    2 -> TechPracticalActivitiesTab(
                         tech = tech,
                         language = language,
                         scoreInfo = scoreInfo,
@@ -506,7 +689,7 @@ fun TechDetailScreen(
                         },
                         onAwardPoints = { actId, pts -> onAwardActivityPoints(tech, actId, pts) }
                     )
-                    2 -> TechQuizTab(
+                    3 -> TechQuizTab(
                         tech = tech,
                         language = language,
                         scoreInfo = scoreInfo,
@@ -524,8 +707,53 @@ fun TechDetailScreen(
                         },
                         onAwardQuizPoints = { qId, pts -> onAwardQuizPoints(tech, qId, pts) }
                     )
-                    3 -> TechCheatsheetTab(tech, language)
-                    4 -> TechRoadmapTab(tech, language)
+                    4 -> TechCheatsheetTab(tech, language)
+                    5 -> TechRoadmapTab(tech, language)
+                    6 -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (onOpenFullIdleHub != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = onOpenFullIdleHub,
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier.testTag("btn_tech_detail_open_all_idles")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Terminal,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isPt) "Abrir Central 12 IDLEs" else "Open 12 IDLEs Hub",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                            LanguageIdleWorkspace(
+                                tech = tech,
+                                code = idleCode,
+                                executionResult = idleResult,
+                                language = language,
+                                onCodeChange = onUpdateIdleCode,
+                                onRunCode = onRunIdleCode,
+                                onResetCode = onResetIdleCode,
+                                onClearOutput = onClearIdleOutput
+                            )
+                            Spacer(modifier = Modifier.height(72.dp))
+                        }
+                    }
                 }
             }
 
@@ -571,6 +799,16 @@ fun TechDetailScreen(
         DailyLivesInfoDialog(
             livesInfo = dailyLives,
             language = language,
+            availableXp = availableShopXp,
+            availableCrystals = availableGameCrystals,
+            onPurchaseLives = onPurchaseLives,
+            onOpenLifeShop = onOpenLifeShop,
+            onOpen3DGame = onOpen3DGame?.let { openGame ->
+                {
+                    showLivesInfoDialog = false
+                    openGame()
+                }
+            },
             onDismiss = { showLivesInfoDialog = false }
         )
     }
@@ -578,6 +816,17 @@ fun TechDetailScreen(
     if (showOutOfLivesDialog) {
         OutOfLivesDialog(
             language = language,
+            availableXp = availableShopXp,
+            availableCrystals = availableGameCrystals,
+            maxDailyLives = dailyLives.maxDaily,
+            onPurchaseLives = onPurchaseLives,
+            onOpenLifeShop = onOpenLifeShop,
+            onOpen3DGame = onOpen3DGame?.let { openGame ->
+                {
+                    showOutOfLivesDialog = false
+                    openGame()
+                }
+            },
             onDismiss = { showOutOfLivesDialog = false }
         )
     }
@@ -1718,10 +1967,16 @@ fun TechQuizTab(
 }
 
 @Composable
-fun TechOverviewTab(tech: Technology, isPt: Boolean) {
+fun TechOverviewTab(
+    tech: Technology,
+    language: Language,
+    completedLessonIds: Set<String> = emptySet(),
+    onOpenModulesTab: () -> Unit = {}
+) {
+    val isPt = language == Language.PT
     val overview = TechContentRepository.getOverview(tech, isPt)
     LazyColumn(
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
@@ -1746,6 +2001,15 @@ fun TechOverviewTab(tech: Technology, isPt: Boolean) {
         }
 
         item {
+            CourseOverviewQuickReferencesCard(
+                tech = tech,
+                language = language,
+                completedLessonIds = completedLessonIds,
+                onOpenModulesTab = onOpenModulesTab
+            )
+        }
+
+        item {
             Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -1759,9 +2023,9 @@ fun TechOverviewTab(tech: Technology, isPt: Boolean) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = if (isPt) {
-                            "Para fixar ${tech.displayName}, pratique escrevendo código e executando comandos diariamente na aba 'Atividades Práticas'. Quanto mais você acerta, mais pontos ganha para subir de nível!"
+                            "Siga os módulos em vídeo na aba 'Módulos & Vídeos' e depois fixe ${tech.displayName} resolvendo desafios diários em 'Atividades Práticas'!"
                         } else {
-                            "To master ${tech.displayName}, write code and run commands daily in the 'Hands-on Practice' tab. The more you solve correctly, the more XP you earn to level up!"
+                            "Follow the video modules in 'Modules & Videos' and master ${tech.displayName} by solving daily challenges in 'Hands-on Practice'!"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -125,6 +125,7 @@ private data class ArenaEntity3D(
     var z: Float,
     val isCrystal: Boolean,
     val obstacleKind: ObstacleKind = ObstacleKind.TALL_FIREWALL,
+    val crystalElevation: Float = 0f,
     var collectedOrHit: Boolean = false
 )
 
@@ -220,8 +221,8 @@ fun GameAndScene3DScreen(
         scoreSubmittedThisRun = false
         entities.clear()
         particles.clear()
-        entities.add(ArenaEntity3D(laneIndex = 1, z = 18f, isCrystal = true))
-        entities.add(ArenaEntity3D(laneIndex = 2, z = 24f, isCrystal = true))
+        entities.add(ArenaEntity3D(laneIndex = 1, z = 20f, isCrystal = false, obstacleKind = ObstacleKind.LOW_BARRIER))
+        entities.add(ArenaEntity3D(laneIndex = 2, z = 26f, isCrystal = true, crystalElevation = 1.25f))
         playPhase = GamePlayPhase.PLAYING
         SoundEffectsEngine.playStartFanfare()
     }
@@ -292,7 +293,7 @@ fun GameAndScene3DScreen(
                     if (hitFlashTimer > 0f) hitFlashTimer = (hitFlashTimer - dt).coerceAtLeast(0f)
                     if (jumpBufferTimer > 0f) jumpBufferTimer = (jumpBufferTimer - dt).coerceAtLeast(0f)
 
-                    val speed = (12.5f + elapsedSeconds * 0.28f).coerceAtMost(26f)
+                    val speed = (14.5f + elapsedSeconds * 0.36f).coerceAtMost(30f)
                     worldScrollZ += speed * dt
                     score += (speed * dt * 1.4f).toInt()
 
@@ -320,22 +321,63 @@ fun GameAndScene3DScreen(
                         }
                     }
 
-                    // Spawn waves
+                    // Spawn waves (diamonds are rarer and often require jumping or dodging tighter obstacles)
                     spawnAccumulator += speed * dt
-                    val spawnStep = (9.5f - elapsedSeconds * 0.06f).coerceIn(5.4f, 9.5f)
+                    val spawnStep = (8.8f - elapsedSeconds * 0.08f).coerceIn(4.6f, 8.8f)
                     if (spawnAccumulator >= spawnStep) {
                         spawnAccumulator = 0f
                         val lane = Random.nextInt(0, 3)
-                        val isCrystal = Random.nextFloat() < 0.48f
+                        val isCrystal = Random.nextFloat() < 0.16f
                         if (isCrystal) {
-                            entities.add(ArenaEntity3D(laneIndex = lane, z = 32f, isCrystal = true))
+                            val aerial = Random.nextFloat() < 0.55f
+                            entities.add(
+                                ArenaEntity3D(
+                                    laneIndex = lane,
+                                    z = 32f,
+                                    isCrystal = true,
+                                    crystalElevation = if (aerial) 1.25f else 0f
+                                )
+                            )
                         } else {
-                            val kind = if (Random.nextFloat() < 0.4f) ObstacleKind.LOW_BARRIER else ObstacleKind.TALL_FIREWALL
+                            val kind = if (Random.nextFloat() < 0.38f) ObstacleKind.LOW_BARRIER else ObstacleKind.TALL_FIREWALL
                             entities.add(ArenaEntity3D(laneIndex = lane, z = 32f, isCrystal = false, obstacleKind = kind))
-                            // Fair companion crystal in an open lane
-                            if (Random.nextFloat() < 0.65f) {
-                                val safeLane = (lane + Random.nextInt(1, 3)) % 3
-                                entities.add(ArenaEntity3D(laneIndex = safeLane, z = 32f, isCrystal = true))
+
+                            // 35% chance of a second obstacle in another lane (always leaves at least 1 open lane)
+                            val secondLane = (lane + Random.nextInt(1, 3)) % 3
+                            if (Random.nextFloat() < 0.35f) {
+                                val secondKind = if (Random.nextFloat() < 0.45f) ObstacleKind.LOW_BARRIER else ObstacleKind.TALL_FIREWALL
+                                entities.add(
+                                    ArenaEntity3D(
+                                        laneIndex = secondLane,
+                                        z = 32f,
+                                        isCrystal = false,
+                                        obstacleKind = secondKind
+                                    )
+                                )
+                            }
+
+                            // Rarer risk/reward diamond (22%): either aerial above a low barrier or tucked in the escape lane
+                            if (Random.nextFloat() < 0.22f) {
+                                if (kind == ObstacleKind.LOW_BARRIER && Random.nextFloat() < 0.65f) {
+                                    entities.add(
+                                        ArenaEntity3D(
+                                            laneIndex = lane,
+                                            z = 32f,
+                                            isCrystal = true,
+                                            crystalElevation = 1.35f
+                                        )
+                                    )
+                                } else {
+                                    val safeLane = (0..2).firstOrNull { it != lane && it != secondLane } ?: ((lane + 1) % 3)
+                                    entities.add(
+                                        ArenaEntity3D(
+                                            laneIndex = safeLane,
+                                            z = 32f,
+                                            isCrystal = true,
+                                            crystalElevation = if (Random.nextFloat() < 0.45f) 1.2f else 0f
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -346,15 +388,16 @@ fun GameAndScene3DScreen(
                         val ent = iter.next()
                         ent.z -= speed * dt
                         val ex = LANE_POSITIONS[ent.laneIndex]
-                        if (!ent.collectedOrHit && ent.z in 0.8f..2.6f && abs(ex - playerX) < 1.05f) {
+                        val hitRadius = if (ent.isCrystal) 0.72f else 1.05f
+                        if (!ent.collectedOrHit && ent.z in 0.8f..2.6f && abs(ex - playerX) < hitRadius) {
                             if (ent.isCrystal) {
-                                if (playerY < 1.8f) {
+                                if (abs(playerY - ent.crystalElevation) < 0.95f) {
                                     ent.collectedOrHit = true
                                     crystals++
                                     score += 45 * combo
                                     combo = (combo + 1).coerceAtMost(8)
                                     if (combo > maxCombo) maxCombo = combo
-                                    spawnBurst(ex, 0.7f, ent.z, Color(0xFF00E5FF), 10)
+                                    spawnBurst(ex, 0.7f + ent.crystalElevation, ent.z, Color(0xFF00E5FF), 10)
                                     SoundEffectsEngine.playPickupChime(combo)
                                 }
                             } else {
@@ -508,11 +551,11 @@ fun GameAndScene3DScreen(
                     val ex = LANE_POSITIONS[ent.laneIndex]
                     if (ent.isCrystal) {
                         sceneFaces.addCrystalGem(
-                            center = Vec3(ex, 0.75f + 0.15f * sin(globalTime * 4f + ent.z), ent.z),
-                            radius = 0.44f,
-                            height = 0.92f,
-                            spinRad = globalTime * 3.2f + ent.z,
-                            color = Color(0xFF00E5FF)
+                            center = Vec3(ex, 0.70f + ent.crystalElevation + 0.14f * sin(globalTime * 4f + ent.z), ent.z),
+                            radius = 0.40f,
+                            height = 0.86f,
+                            spinRad = globalTime * 3.4f + ent.z,
+                            color = if (ent.crystalElevation > 0f) Color(0xFF38BDF8) else Color(0xFF00E5FF)
                         )
                     } else if (ent.obstacleKind == ObstacleKind.LOW_BARRIER) {
                         sceneFaces.addBoxPart(

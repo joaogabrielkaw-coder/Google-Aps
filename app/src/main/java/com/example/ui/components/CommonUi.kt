@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,11 +51,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.model.Language
 import com.example.model.ThemePreference
 import com.example.model.UserAccount
@@ -67,16 +72,19 @@ fun AppTopBar(
     currentTheme: ThemePreference,
     userAccount: UserAccount? = null,
     dailyLives: com.example.ui.DailyLivesInfo = com.example.ui.DailyLivesInfo(),
+    pendingChatRequestsCount: Int = 0,
+    isCommunityChatSelected: Boolean = false,
     isSettingsSelected: Boolean = false,
     onOpenLivesInfo: () -> Unit = {},
+    onOpenLifeShop: () -> Unit = {},
     onToggleLanguage: () -> Unit = {},
     onToggleTheme: () -> Unit = {},
+    onOpenCommunityChat: () -> Unit = {},
     onOpenLeaderboard: () -> Unit = {},
     onOpenAuth: () -> Unit = {},
     onOpenSettings: () -> Unit = {}
 ) {
     val brand = LocalDevRoutineColors.current
-    val isPt = currentLanguage == Language.PT
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -101,30 +109,62 @@ fun AppTopBar(
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "DevRoutine AI",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
+                            fontSize = 16.sp
                         ),
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Python • SQL • Java & DBs",
+                        text = stringResource(R.string.app_topbar_subtitle),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         ),
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         },
         actions = {
-            // Vidas Diárias (25/25)
+            // Vidas Diárias (25/25) + botão "+" para loja de vidas extras
             DailyLivesPill(
                 livesInfo = dailyLives,
-                onClick = onOpenLivesInfo
+                onClick = onOpenLivesInfo,
+                onAddLivesClick = onOpenLifeShop
             )
+
+            // Chat & Ligações da Comunidade
+            IconButton(
+                onClick = onOpenCommunityChat,
+                modifier = Modifier.testTag("button_top_community_chat")
+            ) {
+                BadgedBox(
+                    badge = {
+                        if (pendingChatRequestsCount > 0) {
+                            Badge(
+                                containerColor = brand.accent,
+                                contentColor = Color.White
+                            ) {
+                                Text(
+                                    text = if (pendingChatRequestsCount > 9) "9+" else pendingChatRequestsCount.toString(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = stringResource(R.string.action_community_chat),
+                        tint = if (isCommunityChatSelected) brand.accent else brand.primary
+                    )
+                }
+            }
 
             // Placar / Leaderboard button
             IconButton(
@@ -133,7 +173,7 @@ fun AppTopBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.EmojiEvents,
-                    contentDescription = if (isPt) "Placar de Desenvolvedores" else "Developer Leaderboard",
+                    contentDescription = stringResource(R.string.action_leaderboard),
                     tint = brand.primary
                 )
             }
@@ -154,7 +194,7 @@ fun AppTopBar(
                 } else {
                     Icon(
                         imageVector = Icons.Default.AccountCircle,
-                        contentDescription = if (isPt) "Entrar / Perfil" else "Sign in / Profile",
+                        contentDescription = stringResource(R.string.action_sign_in_profile),
                         tint = brand.accent
                     )
                 }
@@ -183,7 +223,7 @@ fun AppTopBar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
-                        contentDescription = if (isPt) "Configurações" else "Settings",
+                        contentDescription = stringResource(R.string.action_settings),
                         tint = if (isSettingsSelected) brand.primary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(19.dp)
                     )
@@ -201,10 +241,18 @@ fun AppTopBar(
 fun AppBottomNav(
     currentDestination: AppDestination,
     language: Language,
+    pendingChatBadgeCount: Int = 0,
+    hasActiveLives: Boolean = false,
     onNavigate: (AppDestination) -> Unit
 ) {
-    val isPt = language == Language.PT
     val brand = LocalDevRoutineColors.current
+    val homeLabel = stringResource(R.string.nav_home)
+    val techsLabel = stringResource(R.string.nav_techs)
+    val progressLabel = stringResource(R.string.nav_progress)
+    val calendarLabel = stringResource(R.string.nav_calendar)
+    val aiLabel = stringResource(R.string.nav_ai)
+    val chatLabel = stringResource(R.string.nav_chat)
+    val chatDesc = stringResource(R.string.nav_chat_live_desc)
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
@@ -212,8 +260,16 @@ fun AppBottomNav(
         NavigationBarItem(
             selected = currentDestination == AppDestination.HOME,
             onClick = { onNavigate(AppDestination.HOME) },
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text(if (isPt) "Início" else "Home", fontSize = 11.sp) },
+            icon = { Icon(Icons.Default.Home, contentDescription = homeLabel) },
+            label = {
+                Text(
+                    text = homeLabel,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             modifier = Modifier.testTag("nav_home"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.onPrimary,
@@ -224,8 +280,16 @@ fun AppBottomNav(
         NavigationBarItem(
             selected = currentDestination == AppDestination.TECH_HUB || currentDestination == AppDestination.TECH_DETAIL,
             onClick = { onNavigate(AppDestination.TECH_HUB) },
-            icon = { Icon(Icons.Default.School, contentDescription = "Techs") },
-            label = { Text(if (isPt) "Cursos" else "Techs", fontSize = 11.sp) },
+            icon = { Icon(Icons.Default.School, contentDescription = techsLabel) },
+            label = {
+                Text(
+                    text = techsLabel,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             modifier = Modifier.testTag("nav_techs"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.onPrimary,
@@ -236,8 +300,16 @@ fun AppBottomNav(
         NavigationBarItem(
             selected = currentDestination == AppDestination.PROGRESS,
             onClick = { onNavigate(AppDestination.PROGRESS) },
-            icon = { Icon(Icons.Default.QueryStats, contentDescription = "Progresso") },
-            label = { Text(if (isPt) "Progresso" else "Progress", fontSize = 11.sp) },
+            icon = { Icon(Icons.Default.QueryStats, contentDescription = progressLabel) },
+            label = {
+                Text(
+                    text = progressLabel,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             modifier = Modifier.testTag("nav_progress"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Color.White,
@@ -248,8 +320,16 @@ fun AppBottomNav(
         NavigationBarItem(
             selected = currentDestination == AppDestination.CALENDAR,
             onClick = { onNavigate(AppDestination.CALENDAR) },
-            icon = { Icon(Icons.Default.CalendarMonth, contentDescription = "Calendar") },
-            label = { Text(if (isPt) "Calendário" else "Calendar", fontSize = 11.sp) },
+            icon = { Icon(Icons.Default.CalendarMonth, contentDescription = calendarLabel) },
+            label = {
+                Text(
+                    text = calendarLabel,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             modifier = Modifier.testTag("nav_calendar"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = MaterialTheme.colorScheme.onSecondary,
@@ -260,13 +340,65 @@ fun AppBottomNav(
         NavigationBarItem(
             selected = currentDestination == AppDestination.AI_CHAT,
             onClick = { onNavigate(AppDestination.AI_CHAT) },
-            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "AI Tutor") },
-            label = { Text(if (isPt) "IA Tutor" else "AI Tutor", fontSize = 11.sp) },
+            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = aiLabel) },
+            label = {
+                Text(
+                    text = aiLabel,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
             modifier = Modifier.testTag("nav_ai"),
             colors = NavigationBarItemDefaults.colors(
                 selectedIconColor = Color.White,
                 selectedTextColor = brand.primary,
                 indicatorColor = brand.primary
+            )
+        )
+        NavigationBarItem(
+            selected = currentDestination == AppDestination.COMMUNITY_CHAT,
+            onClick = { onNavigate(AppDestination.COMMUNITY_CHAT) },
+            icon = {
+                BadgedBox(
+                    badge = {
+                        when {
+                            pendingChatBadgeCount > 0 -> {
+                                Badge(containerColor = brand.accent, contentColor = Color.White) {
+                                    Text(
+                                        text = if (pendingChatBadgeCount > 9) "9+" else "$pendingChatBadgeCount",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            hasActiveLives -> {
+                                Badge(containerColor = Color(0xFFE53935), contentColor = Color.White)
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Chat,
+                        contentDescription = chatDesc
+                    )
+                }
+            },
+            label = {
+                Text(
+                    text = chatLabel,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            modifier = Modifier.testTag("nav_community_chat"),
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color.White,
+                selectedTextColor = Color(0xFF00ACC1),
+                indicatorColor = Color(0xFF00ACC1)
             )
         )
     }
@@ -306,7 +438,7 @@ fun CodeSnippetCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copiar Código",
+                        contentDescription = stringResource(R.string.common_copy_code),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )

@@ -136,11 +136,13 @@ class LeaderboardRepository(context: Context) {
         completedActivityIds: Set<String> = emptySet(),
         completedQuizIds: Set<Int> = emptySet(),
         techScores: Map<String, Int> = emptyMap(),
-        themeConfig: com.example.model.ThemeCustomization? = null
+        themeConfig: com.example.model.ThemeCustomization? = null,
+        techMinutes: Map<String, Int> = emptyMap(),
+        unlockedBadgeIds: List<String> = emptyList()
     ): Boolean = withContext(Dispatchers.IO) {
         if (account.userId.isBlank()) return@withContext false
         try {
-            val payload: Map<String, Any> = mapOf(
+            val payload: MutableMap<String, Any> = mutableMapOf(
                 "userId" to account.userId,
                 "displayName" to account.displayName.ifBlank { "Dev" },
                 "email" to account.email,
@@ -155,6 +157,9 @@ class LeaderboardRepository(context: Context) {
                 "badgesCount" to account.badgesCount,
                 "updatedAt" to com.google.firebase.Timestamp.now()
             )
+            if (unlockedBadgeIds.isNotEmpty()) {
+                payload["unlockedBadgeIds"] = unlockedBadgeIds.distinct().take(48)
+            }
 
             // Salva na coleção pública do placar
             db.collection("leaderboard")
@@ -162,7 +167,7 @@ class LeaderboardRepository(context: Context) {
                 .set(payload)
                 .await()
 
-            // Salva no perfil privado do usuário com metadados de progresso e tema
+            // Salva no perfil privado do usuário com metadados de progresso, horas por matéria, conquistas e tema
             try {
                 val userPayload: MutableMap<String, Any> = payload.toMutableMap()
                 if (completedActivityIds.isNotEmpty()) {
@@ -173,6 +178,9 @@ class LeaderboardRepository(context: Context) {
                 }
                 if (techScores.isNotEmpty()) {
                     userPayload["techScores"] = techScores
+                }
+                if (techMinutes.isNotEmpty()) {
+                    userPayload["techMinutes"] = techMinutes
                 }
                 if (themeConfig != null) {
                     userPayload["themeConfig"] = themeConfig.toStorageMap()
@@ -250,6 +258,8 @@ class LeaderboardRepository(context: Context) {
                         val levelTitle = doc.getString("levelTitle") ?: "Aspirante a Dev"
                         val streak = (doc.get("streakDays") as? Number)?.toInt() ?: 0
                         val badges = (doc.get("badgesCount") as? Number)?.toInt() ?: 0
+                        val badgeIds = (doc.get("unlockedBadgeIds") as? List<*>)
+                            ?.mapNotNull { it?.toString() } ?: emptyList()
 
                         LeaderboardEntry(
                             userId = uid,
@@ -262,7 +272,8 @@ class LeaderboardRepository(context: Context) {
                             levelTitlePt = levelTitle,
                             levelTitleEn = levelTitle,
                             streakDays = streak,
-                            badgesCount = badges,
+                            badgesCount = maxOf(badges, badgeIds.size),
+                            unlockedBadgeIds = badgeIds,
                             isCurrentUser = (uid == currentUserId)
                         )
                     } catch (e: Exception) {

@@ -458,3 +458,88 @@ data class UserFeedbackNote(
     val message: String,
     val createdAtIso: String
 )
+
+enum class CourseResourceType(
+    val labelPt: String,
+    val labelEn: String
+) {
+    YOUTUBE_PLAYLIST("Playlist YouTube", "YouTube Playlist"),
+    YOUTUBE_VIDEO("Vídeo Aula YouTube", "YouTube Video"),
+    FREE_COURSE_SITE("Curso Livre Online", "Free Online Course"),
+    OFFICIAL_DOCS("Documentação Oficial", "Official Docs");
+
+    fun label(language: Language): String = if (language == Language.PT) labelPt else labelEn
+}
+
+data class CourseReference(
+    val id: String,
+    val titlePt: String,
+    val titleEn: String,
+    val provider: String,
+    val isPortuguese: Boolean,
+    val type: CourseResourceType,
+    val url: String,
+    val durationLabel: String,
+    val descriptionPt: String,
+    val descriptionEn: String
+) {
+    fun title(language: Language): String = if (language == Language.PT) titlePt else titleEn
+    fun description(language: Language): String = if (language == Language.PT) descriptionPt else descriptionEn
+}
+
+data class CourseLesson(
+    val id: String,
+    val lessonNumber: Int,
+    val titlePt: String,
+    val titleEn: String,
+    val summaryPt: String,
+    val summaryEn: String,
+    val durationMinutes: Int,
+    val topicsPt: List<String>,
+    val topicsEn: List<String>,
+    val videoRefUrl: String,
+    val videoRefLabelPt: String,
+    val videoRefLabelEn: String
+) {
+    fun title(language: Language): String = if (language == Language.PT) titlePt else titleEn
+    fun summary(language: Language): String = if (language == Language.PT) summaryPt else summaryEn
+    fun topics(language: Language): List<String> = if (language == Language.PT) topicsPt else topicsEn
+    fun videoRefLabel(language: Language): String = if (language == Language.PT) videoRefLabelPt else videoRefLabelEn
+}
+
+data class CourseModule(
+    val id: String,
+    val moduleNumber: Int,
+    val titlePt: String,
+    val titleEn: String,
+    val objectivePt: String,
+    val objectiveEn: String,
+    val levelLabelPt: String,
+    val levelLabelEn: String,
+    val primaryVideoUrl: String,
+    val primaryVideoTitlePt: String,
+    val primaryVideoTitleEn: String,
+    val lessons: List<CourseLesson>
+) {
+    fun title(language: Language): String = if (language == Language.PT) titlePt else titleEn
+    fun objective(language: Language): String = if (language == Language.PT) objectivePt else objectiveEn
+    fun levelLabel(language: Language): String = if (language == Language.PT) levelLabelPt else levelLabelEn
+    fun primaryVideoTitle(language: Language): String = if (language == Language.PT) primaryVideoTitlePt else primaryVideoTitleEn
+}
+
+data class TechCourseCurriculum(
+    val tech: Technology,
+    val modules: List<CourseModule>,
+    val references: List<CourseReference>
+)
+
+data class CourseProgressSummary(
+    val totalLessons: Int,
+    val completedLessons: Int,
+    val remainingLessons: Int,
+    val totalMinutes: Int,
+    val completedMinutes: Int,
+    val progressFraction: Float,
+    val progressPercent: Int
+)
+

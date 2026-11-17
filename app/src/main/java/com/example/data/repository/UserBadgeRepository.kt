@@ -8,6 +8,7 @@ import com.example.model.Technology
 import com.example.model.UserScoreInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.ZoneId
@@ -25,6 +26,61 @@ class UserBadgeRepository(
 
     companion object {
         val DEFAULT_BADGES = listOf(
+            UserBadgeEntity(
+                id = "badge_python_beginner",
+                titlePt = "Python Iniciante",
+                titleEn = "Python Beginner",
+                descriptionPt = "Conquiste 30+ XP resolvendo desafios ou quizzes de Python.",
+                descriptionEn = "Earn 30+ XP solving Python challenges or quizzes.",
+                category = "TECH",
+                iconKey = "python",
+                maxProgress = 30,
+                xpReward = 50
+            ),
+            UserBadgeEntity(
+                id = "badge_sql_beginner",
+                titlePt = "SQL Iniciante",
+                titleEn = "SQL Beginner",
+                descriptionPt = "Conquiste 30+ XP praticando consultas em SQL, MySQL ou PostgreSQL.",
+                descriptionEn = "Earn 30+ XP practicing queries in SQL, MySQL, or PostgreSQL.",
+                category = "TECH",
+                iconKey = "sql",
+                maxProgress = 30,
+                xpReward = 50
+            ),
+            UserBadgeEntity(
+                id = "badge_js_beginner",
+                titlePt = "JavaScript Iniciante",
+                titleEn = "JavaScript Beginner",
+                descriptionPt = "Conquiste 30+ XP praticando JavaScript ou TypeScript.",
+                descriptionEn = "Earn 30+ XP practicing JavaScript or TypeScript.",
+                category = "TECH",
+                iconKey = "code",
+                maxProgress = 30,
+                xpReward = 50
+            ),
+            UserBadgeEntity(
+                id = "badge_kotlin_beginner",
+                titlePt = "Kotlin Iniciante",
+                titleEn = "Kotlin Beginner",
+                descriptionPt = "Conquiste 30+ XP na trilha de Kotlin e Jetpack Compose.",
+                descriptionEn = "Earn 30+ XP on the Kotlin & Jetpack Compose track.",
+                category = "TECH",
+                iconKey = "code",
+                maxProgress = 30,
+                xpReward = 50
+            ),
+            UserBadgeEntity(
+                id = "badge_backend_beginner",
+                titlePt = "Backend & Sistemas Iniciante",
+                titleEn = "Backend & Systems Beginner",
+                descriptionPt = "Conquiste 30+ XP em Java, Go ou MongoDB.",
+                descriptionEn = "Earn 30+ XP in Java, Go, or MongoDB.",
+                category = "TECH",
+                iconKey = "code",
+                maxProgress = 30,
+                xpReward = 50
+            ),
             UserBadgeEntity(
                 id = "badge_python_master",
                 titlePt = "Mestre Python",
@@ -266,6 +322,72 @@ class UserBadgeRepository(
                 iconKey = "trophy",
                 maxProgress = 600,
                 xpReward = 400
+            ),
+            UserBadgeEntity(
+                id = "badge_sql_hours_1",
+                titlePt = "1 Hora de SQL",
+                titleEn = "1 Hour of SQL",
+                descriptionPt = "Estudou 1 hora (60 min) em SQL, MySQL ou PostgreSQL.",
+                descriptionEn = "Studied 1 hour (60 min) in SQL, MySQL, or PostgreSQL.",
+                category = "SUBJECT_HOURS",
+                iconKey = "sql",
+                maxProgress = 60,
+                xpReward = 80
+            ),
+            UserBadgeEntity(
+                id = "badge_sql_hours_10",
+                titlePt = "10 Horas de SQL",
+                titleEn = "10 Hours of SQL",
+                descriptionPt = "Estudou 10 horas (600 min) dominando bancos SQL, MySQL e PostgreSQL.",
+                descriptionEn = "Studied 10 hours (600 min) mastering SQL, MySQL, and PostgreSQL.",
+                category = "SUBJECT_HOURS",
+                iconKey = "sql",
+                maxProgress = 600,
+                xpReward = 450
+            ),
+            UserBadgeEntity(
+                id = "badge_python_hours_1",
+                titlePt = "1 Hora de Python",
+                titleEn = "1 Hour of Python",
+                descriptionPt = "Estudou 1 hora (60 min) de tempo ativo focado em Python.",
+                descriptionEn = "Logged 1 hour (60 min) of active study time focused on Python.",
+                category = "SUBJECT_HOURS",
+                iconKey = "python",
+                maxProgress = 60,
+                xpReward = 80
+            ),
+            UserBadgeEntity(
+                id = "badge_python_hours_5",
+                titlePt = "5 Horas de Python",
+                titleEn = "5 Hours of Python",
+                descriptionPt = "Estudou 5 horas (300 min) de tempo ativo focado em Python.",
+                descriptionEn = "Logged 5 hours (300 min) of active study time focused on Python.",
+                category = "SUBJECT_HOURS",
+                iconKey = "python",
+                maxProgress = 300,
+                xpReward = 220
+            ),
+            UserBadgeEntity(
+                id = "badge_js_hours_5",
+                titlePt = "5 Horas de Web & JS",
+                titleEn = "5 Hours of Web & JS",
+                descriptionPt = "Estudou 5 horas (300 min) em JavaScript ou TypeScript.",
+                descriptionEn = "Studied 5 hours (300 min) in JavaScript or TypeScript.",
+                category = "SUBJECT_HOURS",
+                iconKey = "code",
+                maxProgress = 300,
+                xpReward = 220
+            ),
+            UserBadgeEntity(
+                id = "badge_kotlin_hours_5",
+                titlePt = "5 Horas de Kotlin",
+                titleEn = "5 Hours of Kotlin",
+                descriptionPt = "Estudou 5 horas (300 min) na trilha de Kotlin e Android.",
+                descriptionEn = "Studied 5 hours (300 min) on the Kotlin & Android track.",
+                category = "SUBJECT_HOURS",
+                iconKey = "code",
+                maxProgress = 300,
+                xpReward = 220
             )
         ) + Technology.entries.flatMap { tech ->
             listOf(
@@ -329,7 +451,8 @@ class UserBadgeRepository(
         isAssessmentCompleted: Boolean = false,
         weeklyDaysCount: Int = 0,
         monthlySessionsCount: Int = 0,
-        dailyChallengeCountsByTech: Map<Technology, Int> = emptyMap()
+        dailyChallengeCountsByTech: Map<Technology, Int> = emptyMap(),
+        techMinutes: Map<Technology, Int> = emptyMap()
     ): List<UserBadgeEntity> = withContext(Dispatchers.IO) {
         val newlyUnlocked = mutableListOf<UserBadgeEntity>()
         val now = System.currentTimeMillis()
@@ -388,8 +511,14 @@ class UserBadgeRepository(
             newlyUnlocked = newlyUnlocked
         )
 
-        // 3. Regras de Tecnologias Específicas
+        // 3. Regras de Tecnologias Específicas (Iniciante + Maestria)
         val pythonScore = techScores[Technology.PYTHON] ?: 0
+        updateBadgeProgressIfChanged(
+            id = "badge_python_beginner",
+            progress = pythonScore.coerceAtMost(30),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
         updateBadgeProgressIfChanged(
             id = "badge_python_master",
             progress = pythonScore.coerceAtMost(90),
@@ -403,6 +532,12 @@ class UserBadgeRepository(
             techScores[Technology.POSTGRESQL] ?: 0
         )
         updateBadgeProgressIfChanged(
+            id = "badge_sql_beginner",
+            progress = sqlScore.coerceAtMost(30),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
             id = "badge_sql_wizard",
             progress = sqlScore.coerceAtMost(90),
             now = now,
@@ -414,6 +549,12 @@ class UserBadgeRepository(
             techScores[Technology.TYPESCRIPT] ?: 0
         )
         updateBadgeProgressIfChanged(
+            id = "badge_js_beginner",
+            progress = jsScore.coerceAtMost(30),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
             id = "badge_js_ninja",
             progress = jsScore.coerceAtMost(90),
             now = now,
@@ -422,8 +563,26 @@ class UserBadgeRepository(
 
         val kotlinScore = techScores[Technology.KOTLIN] ?: 0
         updateBadgeProgressIfChanged(
+            id = "badge_kotlin_beginner",
+            progress = kotlinScore.coerceAtMost(30),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
             id = "badge_kotlin_architect",
             progress = kotlinScore.coerceAtMost(90),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+
+        val backendScore = maxOf(
+            techScores[Technology.JAVA] ?: 0,
+            techScores[Technology.GO] ?: 0,
+            techScores[Technology.MONGODB] ?: 0
+        )
+        updateBadgeProgressIfChanged(
+            id = "badge_backend_beginner",
+            progress = backendScore.coerceAtMost(30),
             now = now,
             newlyUnlocked = newlyUnlocked
         )
@@ -560,7 +719,72 @@ class UserBadgeRepository(
             )
         }
 
+        // 12. Horas de Estudo por Matéria / Tecnologia (ex: 10 Horas de SQL, 5 Horas de Python)
+        val sqlTotalMinutes = (techMinutes[Technology.SQL] ?: 0) +
+            (techMinutes[Technology.MYSQL] ?: 0) +
+            (techMinutes[Technology.POSTGRESQL] ?: 0)
+        val pythonTotalMinutes = techMinutes[Technology.PYTHON] ?: 0
+        val jsTotalMinutes = (techMinutes[Technology.JAVASCRIPT] ?: 0) +
+            (techMinutes[Technology.TYPESCRIPT] ?: 0)
+        val kotlinTotalMinutes = techMinutes[Technology.KOTLIN] ?: 0
+
+        updateBadgeProgressIfChanged(
+            id = "badge_sql_hours_1",
+            progress = sqlTotalMinutes.coerceAtMost(60),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
+            id = "badge_sql_hours_10",
+            progress = sqlTotalMinutes.coerceAtMost(600),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
+            id = "badge_python_hours_1",
+            progress = pythonTotalMinutes.coerceAtMost(60),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
+            id = "badge_python_hours_5",
+            progress = pythonTotalMinutes.coerceAtMost(300),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
+            id = "badge_js_hours_5",
+            progress = jsTotalMinutes.coerceAtMost(300),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+        updateBadgeProgressIfChanged(
+            id = "badge_kotlin_hours_5",
+            progress = kotlinTotalMinutes.coerceAtMost(300),
+            now = now,
+            newlyUnlocked = newlyUnlocked
+        )
+
         newlyUnlocked
+    }
+
+    /**
+     * Restaura emblemas previamente desbloqueados na conta do usuário no Cloud Firestore.
+     */
+    suspend fun restoreUnlockedBadgeIdsFromCloud(unlockedIds: Set<String>) = withContext(Dispatchers.IO) {
+        if (unlockedIds.isEmpty()) return@withContext
+        badgeDao.insertInitialBadges(DEFAULT_BADGES)
+        val now = System.currentTimeMillis()
+        unlockedIds.forEach { badgeId ->
+            val existing = badgeDao.getBadgeById(badgeId) ?: return@forEach
+            if (!existing.isUnlocked) {
+                badgeDao.unlockBadge(badgeId, now)
+            }
+        }
+    }
+
+    suspend fun getUnlockedBadgeIds(): List<String> = withContext(Dispatchers.IO) {
+        unlockedBadges.first().map { it.id }
     }
 
     private suspend fun updateBadgeProgressIfChanged(

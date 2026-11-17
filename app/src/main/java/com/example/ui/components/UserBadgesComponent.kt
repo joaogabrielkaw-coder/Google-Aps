@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -168,9 +169,10 @@ fun UserBadgesSection(
     val categories = remember(badges, isPt) {
         listOf(
             null to (if (isPt) "Todos" else "All"),
+            "SUBJECT_HOURS" to (if (isPt) "Horas/Matéria" else "Subject Hours"),
+            "TECH" to (if (isPt) "Tecnologias" else "Tech"),
             "DAILY_TECH" to (if (isPt) "Selos Diários" else "Daily Seals"),
             "STREAK" to (if (isPt) "Sequências" else "Streaks"),
-            "TECH" to (if (isPt) "Tecnologias" else "Tech"),
             "ACTIVITY" to (if (isPt) "Atividades" else "Activities"),
             "TIME" to (if (isPt) "Horários" else "Time"),
             "MILESTONE" to (if (isPt) "Marcos" else "Milestones")
@@ -184,8 +186,12 @@ fun UserBadgesSection(
 
     val filteredBadges = remember(badges, selectedCategory) {
         when (selectedCategory) {
-            null -> badges.filter { !it.category.equals("DAILY_TECH", ignoreCase = true) || it.isUnlocked }
-            else -> badges.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+            null -> badges
+                .filter { !it.category.equals("DAILY_TECH", ignoreCase = true) || it.isUnlocked }
+                .sortedByDescending { it.isUnlocked }
+            else -> badges
+                .filter { it.category.equals(selectedCategory, ignoreCase = true) }
+                .sortedByDescending { it.isUnlocked }
         }
     }
 
@@ -848,7 +854,7 @@ fun BadgeCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "${badge.currentProgress}/${badge.maxProgress}",
+                            text = formatBadgeProgressText(badge, language),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1152,7 +1158,7 @@ fun BadgeDetailDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "${badge.currentProgress} / ${badge.maxProgress}",
+                                text = formatBadgeProgressText(badge, language),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1200,6 +1206,284 @@ fun BadgeDetailDialog(
                         text = if (isPt) "Continuar Focado" else "Keep Learning",
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+        }
+    }
+}
+
+fun formatMinutesAsHoursText(minutes: Int): String {
+    val safe = minutes.coerceAtLeast(0)
+    val hrs = safe / 60
+    val mins = safe % 60
+    return when {
+        hrs > 0 && mins > 0 -> "${hrs}h ${mins}m"
+        hrs > 0 -> "${hrs}h"
+        else -> "${mins}m"
+    }
+}
+
+fun formatBadgeProgressText(badge: UserBadgeEntity, language: Language): String {
+    val isTimeHoursBadge = badge.category.equals("SUBJECT_HOURS", ignoreCase = true) ||
+        badge.id.startsWith("badge_screen_time_")
+    return if (isTimeHoursBadge) {
+        "${formatMinutesAsHoursText(badge.currentProgress)} / ${formatMinutesAsHoursText(badge.maxProgress)}"
+    } else {
+        "${badge.currentProgress}/${badge.maxProgress}"
+    }
+}
+
+/**
+ * Vitrine de Conquistas e Marcos exibida diretamente no Perfil do Usuário.
+ */
+@Composable
+fun UserProfileBadgesShowcase(
+    badges: List<UserBadgeEntity>,
+    language: Language,
+    onBadgeClick: (UserBadgeEntity) -> Unit,
+    onViewAllAchievements: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val unlockedBadges = remember(badges) {
+        badges.filter { it.isUnlocked }
+            .sortedWith(
+                compareByDescending<UserBadgeEntity> { it.unlockedAtMillis ?: 0L }
+                    .thenByDescending { it.xpReward }
+            )
+    }
+    val nextMilestones = remember(badges) {
+        val priorityOrder = listOf(
+            "badge_python_beginner",
+            "badge_sql_beginner",
+            "badge_sql_hours_1",
+            "badge_sql_hours_10",
+            "badge_python_hours_1"
+        )
+        badges.filter { !it.isUnlocked && !it.category.equals("DAILY_TECH", ignoreCase = true) }
+            .sortedWith(
+                compareByDescending<UserBadgeEntity> { it.progressFraction }
+                    .thenBy { badge ->
+                        val idx = priorityOrder.indexOf(badge.id)
+                        if (idx >= 0) idx else 100
+                    }
+            )
+            .take(3)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        border = BorderStroke(1.dp, PurplePrimary.copy(alpha = 0.28f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("profile_achievements_showcase")
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(
+                        imageVector = Icons.Default.EmojiEvents,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD54F),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isPt) "Conquistas no Perfil (${unlockedBadges.size}/${badges.size})"
+                        else "Profile Badges (${unlockedBadges.size}/${badges.size})",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                androidx.compose.material3.TextButton(
+                    onClick = onViewAllAchievements,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("btn_profile_all_achievements")
+                ) {
+                    Text(
+                        text = if (isPt) "Ver Todas" else "View All",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PurplePrimary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (unlockedBadges.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MilitaryTech,
+                            contentDescription = null,
+                            tint = PurplePrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isPt) {
+                                "Complete desafios como 'Python Iniciante' ou estude para desbloquear '10 Horas de SQL'!"
+                            } else {
+                                "Complete milestones like 'Python Beginner' or study to unlock '10 Hours of SQL'!"
+                            },
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(unlockedBadges.take(10), key = { it.id }) { badge ->
+                        CompactBadgeChip(
+                            badge = badge,
+                            language = language,
+                            onClick = { onBadgeClick(badge) }
+                        )
+                    }
+                }
+            }
+
+            if (nextMilestones.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = if (isPt) "Próximos Marcos" else "Next Milestones",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    nextMilestones.forEach { badge ->
+                        val icon = getBadgeIcon(badge.iconKey)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onBadgeClick(badge) }
+                                .testTag("profile_milestone_${badge.id}")
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            tint = PurplePrimary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = badge.title(language),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = formatBadgeProgressText(badge, language),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PurplePrimary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { badge.progressFraction },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(CircleShape),
+                                    color = PurplePrimary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Modal completo com todas as conquistas e filtros aberto diretamente pelo Perfil do Usuário.
+ */
+@Composable
+fun UserProfileAchievementsModal(
+    badges: List<UserBadgeEntity>,
+    language: Language,
+    onDismiss: () -> Unit
+) {
+    val isPt = language == Language.PT
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.2.dp, Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 620.dp)
+                .testTag("dialog_profile_all_achievements")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isPt) "Todas as Conquistas" else "All Achievements",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = if (isPt) "Fechar" else "Close"
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item {
+                        UserBadgesSection(
+                            badges = badges,
+                            language = language
+                        )
+                    }
                 }
             }
         }

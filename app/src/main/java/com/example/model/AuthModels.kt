@@ -56,6 +56,7 @@ data class LeaderboardEntry(
     val levelTitleEn: String = "Aspiring Dev",
     val streakDays: Int = 0,
     val badgesCount: Int = 0,
+    val unlockedBadgeIds: List<String> = emptyList(),
     val rank: Int = 0,
     val isCurrentUser: Boolean = false
 ) {

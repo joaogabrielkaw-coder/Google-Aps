@@ -1,5 +1,10 @@
 package com.example
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
@@ -20,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.Lifecycle
@@ -40,38 +47,57 @@ import androidx.compose.runtime.setValue
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import com.example.model.ChatCallStatus
+import com.example.model.ChatRequestStatus
 import com.example.model.Language
+import com.example.model.ProSubscriptionPlan
 import com.example.model.ThemePreference
 import com.example.model.UserAccount
 import com.example.ui.AppDestination
 import com.example.ui.MainViewModel
+import com.example.ui.components.ActiveCallTopBanner
+import com.example.ui.components.ActiveLiveTopBanner
 import com.example.ui.components.AppBottomNav
 import com.example.ui.components.AppTopBar
 import com.example.ui.components.AuthLoginDialog
 import com.example.ui.components.BadgeDetailDialog
+import com.example.ui.components.ChatCallOverlay
 import com.example.ui.components.InitialAssessmentDialog
+import com.example.ui.components.LiveStudyRoomOverlay
+import com.example.ui.components.ModerateInterstitialAdDialog
+import com.example.ui.components.ProSubscriptionDialog
 import com.example.ui.components.ProfilePhotoDialog
 import com.example.ui.components.WeeklyStudySummaryModal
 import com.example.ui.screens.AiChatScreen
 import com.example.ui.screens.CalendarScreen
+import com.example.ui.screens.CommunityChatScreen
 import com.example.ui.screens.GameAndScene3DScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.LanguageIdleScreen
 import com.example.ui.screens.LeaderboardScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.ProgressScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SqlDatabaseScreen
+import com.example.ui.screens.StudyMaterialsStoreScreen
+import com.example.ui.screens.TargetSubjectsScreen
 import com.example.ui.screens.TechDetailScreen
 import com.example.ui.screens.TechHubScreen
 import com.example.ui.theme.DevRoutineTheme
+import com.example.util.AppLocaleHelper
 import com.example.util.configureAppCheck
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocaleHelper.wrapBaseContext(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,23 +113,38 @@ class MainActivity : ComponentActivity() {
             val accessibilitySettings by viewModel.accessibilitySettings.collectAsState()
             val language by viewModel.language.collectAsState()
 
+            val baseConfiguration = LocalConfiguration.current
+            val baseContext = LocalContext.current
+            val localizedConfiguration = remember(baseConfiguration, language) {
+                AppLocaleHelper.createLocalizedConfiguration(baseConfiguration, language)
+            }
+            val localizedContext = remember(baseContext, language) {
+                AppLocaleHelper.createLocalizedContext(baseContext, language)
+            }
+            Locale.setDefault(AppLocaleHelper.toLocale(language))
+
             val isDarkTheme = when (themePreference) {
                 ThemePreference.DARK -> true
                 ThemePreference.LIGHT -> false
                 ThemePreference.SYSTEM -> isSystemInDarkTheme()
             }
 
-            DevRoutineTheme(
-                darkTheme = isDarkTheme,
-                customization = themeCustomization,
-                accessibilitySettings = accessibilitySettings
+            CompositionLocalProvider(
+                LocalConfiguration provides localizedConfiguration,
+                LocalContext provides localizedContext
             ) {
-                MainAppContainer(
-                    viewModel = viewModel,
-                    isDarkTheme = isDarkTheme,
-                    currentLanguage = language,
-                    currentTheme = themePreference
-                )
+                DevRoutineTheme(
+                    darkTheme = isDarkTheme,
+                    customization = themeCustomization,
+                    accessibilitySettings = accessibilitySettings
+                ) {
+                    MainAppContainer(
+                        viewModel = viewModel,
+                        isDarkTheme = isDarkTheme,
+                        currentLanguage = language,
+                        currentTheme = themePreference
+                    )
+                }
             }
         }
     }
@@ -151,18 +192,77 @@ fun MainAppContainer(
     val topGameScores by viewModel.topGameScores.collectAsState()
     val bestGameScore by viewModel.bestGameScore.collectAsState()
     val totalGameCrystals by viewModel.totalGameCrystals.collectAsState()
+    val availableShopXp by viewModel.availableShopXp.collectAsState()
+    val availableGameCrystals by viewModel.availableGameCrystals.collectAsState()
     val sqlQueryResult by viewModel.sqlQueryResult.collectAsState()
     val themeCustomization by viewModel.themeCustomization.collectAsState()
     val accessibilitySettings by viewModel.accessibilitySettings.collectAsState()
     val appGeneralSettings by viewModel.appGeneralSettings.collectAsState()
     val userFeedbackNotes by viewModel.userFeedbackNotes.collectAsState()
     val levelUpEvent by viewModel.levelUpEvent.collectAsState()
+    val completedCourseLessonIds by viewModel.completedCourseLessonIds.collectAsState()
+
+    val isFirebaseChatAuthenticated by viewModel.isFirebaseChatAuthenticated.collectAsState()
+    val chatOwnerId by viewModel.chatOwnerId.collectAsState()
+    val chatDirectoryUsers by viewModel.chatDirectoryUsers.collectAsState()
+    val chatRequests by viewModel.chatRequests.collectAsState()
+    val chatConversations by viewModel.chatConversations.collectAsState()
+    val activeChatId by viewModel.activeChatId.collectAsState()
+    val activeChatMessages by viewModel.activeChatMessages.collectAsState()
+    val isChatUploading by viewModel.isChatUploading.collectAsState()
+    val chatStatusFeedback by viewModel.chatStatusFeedback.collectAsState()
+    val activeCallSession by viewModel.activeCallSession.collectAsState()
+    val activeLiveRooms by viewModel.activeLiveRooms.collectAsState()
+    val joinedLiveRoom by viewModel.joinedLiveRoom.collectAsState()
+    val liveRoomMessages by viewModel.liveRoomMessages.collectAsState()
+    val isLiveMicMuted by viewModel.isLiveMicMuted.collectAsState()
+    val isLiveCameraEnabled by viewModel.isLiveCameraEnabled.collectAsState()
+    val isLiveSpeakerOn by viewModel.isLiveSpeakerOn.collectAsState()
+    val isLivePeerConnected by viewModel.isLivePeerConnected.collectAsState()
+    val liveElapsedSeconds by viewModel.liveElapsedSeconds.collectAsState()
+    val targetSubjectsPreference by viewModel.targetSubjectsPreference.collectAsState()
+    val isTargetSubjectsCloudSynced by viewModel.isTargetSubjectsCloudSynced.collectAsState()
+    val targetSubjectsUiState by viewModel.targetSubjectsUiState.collectAsState()
+    val proSubscriptionState by viewModel.proSubscriptionState.collectAsState()
+    val billingStoreState by viewModel.billingStoreUiState.collectAsState()
+    val studyMaterialProductDetails by viewModel.studyMaterialProductDetails.collectAsState()
+    val ownedStudyMaterialIds by viewModel.ownedStudyMaterialIds.collectAsState()
+    val lastLifePurchaseReceipt by viewModel.lastLifePurchaseReceipt.collectAsState()
+    val activeModerateInterstitial by viewModel.activeModerateInterstitial.collectAsState()
+    val isProSubscriber = proSubscriptionState.isCurrentlyActive()
+    val idleSelectedTech by viewModel.idleSelectedTech.collectAsState()
+    val idleCodeByTech by viewModel.idleCodeByTech.collectAsState()
+    val idleResultByTech by viewModel.idleResultByTech.collectAsState()
+
+    val pendingChatRequestsCount = remember(chatRequests, chatOwnerId) {
+        val owner = chatOwnerId
+        if (owner.isNullOrBlank()) 0
+        else chatRequests.count { it.isIncomingFor(owner) && it.status == ChatRequestStatus.PENDING }
+    }
 
     var showAuthDialog by remember { mutableStateOf(false) }
     var showInitialAssessmentDialog by remember { mutableStateOf(false) }
     var showSettingsPhotoDialog by remember { mutableStateOf(false) }
     var showDailyLivesInfoDialog by remember { mutableStateOf(false) }
+    var showLifePurchaseShopDialog by remember { mutableStateOf(false) }
+    var showProSubscriptionDialog by remember { mutableStateOf(false) }
     var hasDeferredAssessmentInSession by remember { mutableStateOf(false) }
+    var isCallMinimized by remember(activeCallSession?.callId) { mutableStateOf(false) }
+    var isLiveMinimized by remember(joinedLiveRoom?.roomId) { mutableStateOf(false) }
+    var pendingTargetSubjectsDraft by remember { mutableStateOf<TargetSubjectsDraft?>(null) }
+
+    LaunchedEffect(isFirebaseChatAuthenticated, pendingTargetSubjectsDraft) {
+        val draft = pendingTargetSubjectsDraft
+        if (isFirebaseChatAuthenticated && draft != null) {
+            pendingTargetSubjectsDraft = null
+            viewModel.saveTargetSubjectsPreferences(
+                subjectIds = draft.subjectIds,
+                dailyGoalMinutes = draft.dailyGoalMinutes,
+                learningTrack = draft.learningTrack,
+                studyGoalNote = draft.studyGoalNote
+            )
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -173,6 +273,7 @@ fun MainAppContainer(
                     viewModel.recordUserActivity()
                     viewModel.refreshDailyLivesIfNewDay()
                     viewModel.refreshDailyScreenTimeIfNewDay()
+                    viewModel.refreshBillingOnResume()
                 }
                 Lifecycle.Event.ON_PAUSE -> {
                     viewModel.setAppInForeground(false)
@@ -222,12 +323,48 @@ fun MainAppContainer(
         }
     }
 
+    val launchGoogleSignIn: (String?, () -> Unit) -> Unit = { extraPhoneNumber, onSuccess ->
+        coroutineScope.launch {
+            try {
+                val googleIdOption = GetSignInWithGoogleOption.Builder(serverClientId)
+                    .build()
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+                val result = credentialManager.getCredential(
+                    request = request,
+                    context = context.findActivity() ?: context
+                )
+                val credential = result.credential
+                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    viewModel.loginWithGoogle(
+                        idToken = googleIdTokenCredential.idToken,
+                        displayName = googleIdTokenCredential.displayName,
+                        email = googleIdTokenCredential.id,
+                        photoUrl = googleIdTokenCredential.profilePictureUri?.toString(),
+                        extraPhone = extraPhoneNumber.orEmpty()
+                    )
+                    onSuccess()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Google sign-in credential manager error: ${e.message}", e)
+            }
+        }
+    }
+
     // Back handling for sub-screens
     BackHandler(enabled = destination != AppDestination.HOME && destination != AppDestination.LOGIN) {
-        if (destination == AppDestination.TECH_DETAIL) {
-            viewModel.navigateTo(AppDestination.TECH_HUB)
-        } else {
-            viewModel.navigateTo(AppDestination.HOME)
+        when {
+            destination == AppDestination.COMMUNITY_CHAT && activeChatId != null -> {
+                viewModel.closeActiveChatConversation()
+            }
+            destination == AppDestination.TECH_DETAIL -> {
+                viewModel.navigateTo(AppDestination.TECH_HUB)
+            }
+            else -> {
+                viewModel.navigateTo(AppDestination.HOME)
+            }
         }
     }
 
@@ -259,14 +396,30 @@ fun MainAppContainer(
                 .fillMaxSize()
                 .testTag("app_scaffold"),
             topBar = {
-                if (destination != AppDestination.TECH_DETAIL && destination != AppDestination.GAME_3D) {
+                val showTopBar = destination != AppDestination.TECH_DETAIL &&
+                    destination != AppDestination.GAME_3D &&
+                    destination != AppDestination.TARGET_SUBJECTS &&
+                    destination != AppDestination.STUDY_STORE &&
+                    destination != AppDestination.LANGUAGE_IDLE &&
+                    !(destination == AppDestination.COMMUNITY_CHAT && activeChatId != null)
+                if (showTopBar) {
                     AppTopBar(
                         currentLanguage = currentLanguage,
                         currentTheme = currentTheme,
                         userAccount = userAccount,
                         dailyLives = dailyLives,
+                        pendingChatRequestsCount = pendingChatRequestsCount,
+                        isCommunityChatSelected = destination == AppDestination.COMMUNITY_CHAT,
                         isSettingsSelected = destination == AppDestination.SETTINGS,
                         onOpenLivesInfo = { showDailyLivesInfoDialog = true },
+                        onOpenLifeShop = { showLifePurchaseShopDialog = true },
+                        onToggleLanguage = { viewModel.toggleLanguage() },
+                        onOpenCommunityChat = {
+                            viewModel.navigateTo(
+                                if (destination == AppDestination.COMMUNITY_CHAT) AppDestination.HOME
+                                else AppDestination.COMMUNITY_CHAT
+                            )
+                        },
                         onOpenLeaderboard = {
                             viewModel.navigateTo(AppDestination.LEADERBOARD)
                         },
@@ -291,6 +444,8 @@ fun MainAppContainer(
                     AppBottomNav(
                         currentDestination = destination,
                         language = currentLanguage,
+                        pendingChatBadgeCount = pendingChatRequestsCount,
+                        hasActiveLives = activeLiveRooms.isNotEmpty(),
                         onNavigate = { dest -> viewModel.navigateTo(dest) }
                     )
                 }
@@ -334,9 +489,17 @@ fun MainAppContainer(
                         getTechScore = { tech -> viewModel.getTechScore(tech) },
                         onPromptAiTopic = { tech, topicTitle -> viewModel.promptAiAboutTopic(tech, topicTitle) },
                         dailyLives = dailyLives,
+                        pendingChatRequestsCount = pendingChatRequestsCount,
+                        isProSubscriber = isProSubscriber,
+                        onOpenProSubscription = { showProSubscriptionDialog = true },
+                        targetSubjectIds = targetSubjectsPreference?.subjectIds.orEmpty(),
+                        completedLessonIds = completedCourseLessonIds,
+                        onOpenTargetSubjects = { viewModel.navigateTo(AppDestination.TARGET_SUBJECTS) },
                         onOpenLivesInfo = { showDailyLivesInfoDialog = true },
+                        onOpenLifeShop = { showLifePurchaseShopDialog = true },
                         onOpenWeeklyAiSummary = { viewModel.openWeeklyStudySummaryModal() },
                         onOpenTech = { tech -> viewModel.openTechDetail(tech) },
+                        onToggleLanguage = { viewModel.toggleLanguage() },
                         onNavigate = { dest -> viewModel.navigateTo(dest) }
                     )
                 }
@@ -344,6 +507,14 @@ fun MainAppContainer(
                 AppDestination.TECH_HUB -> {
                     TechHubScreen(
                         language = currentLanguage,
+                        isProSubscriber = isProSubscriber,
+                        onOpenProSubscription = { showProSubscriptionDialog = true },
+                        targetSubjectIds = targetSubjectsPreference?.subjectIds.orEmpty(),
+                        scoreInfo = scoreInfo,
+                        completedLessonIds = completedCourseLessonIds,
+                        sessions = allSessions,
+                        onOpenTargetSubjects = { viewModel.navigateTo(AppDestination.TARGET_SUBJECTS) },
+                        onOpenStudyStore = { viewModel.navigateTo(AppDestination.STUDY_STORE) },
                         onSelectTech = { tech -> viewModel.openTechDetail(tech) }
                     )
                 }
@@ -364,7 +535,24 @@ fun MainAppContainer(
                         badges = allBadges,
                         dailyLives = dailyLives,
                         appGeneralSettings = appGeneralSettings,
-                        onConsumeLife = { viewModel.consumeLifeForAttempt() }
+                        onConsumeLife = { viewModel.consumeLifeForAttempt() },
+                        availableShopXp = availableShopXp,
+                        availableGameCrystals = availableGameCrystals,
+                        onPurchaseLives = { pkg -> viewModel.purchaseLives(pkg) },
+                        onOpenLifeShop = { showLifePurchaseShopDialog = true },
+                        onOpen3DGame = { viewModel.navigateTo(AppDestination.GAME_3D) },
+                        completedLessonIds = completedCourseLessonIds,
+                        onToggleLessonCompleted = { tech, lessonId ->
+                            viewModel.toggleCourseLessonCompleted(tech, lessonId)
+                        },
+                        idleCode = idleCodeByTech[selectedTech]
+                            ?: com.example.model.LanguageIdleCatalog.getSpec(selectedTech).templates.first().code,
+                        idleResult = idleResultByTech[selectedTech],
+                        onUpdateIdleCode = { newCode -> viewModel.updateIdleCode(selectedTech, newCode) },
+                        onRunIdleCode = { viewModel.runIdleCode(selectedTech) },
+                        onResetIdleCode = { viewModel.resetIdleCode(selectedTech) },
+                        onClearIdleOutput = { viewModel.clearIdleOutput(selectedTech) },
+                        onOpenFullIdleHub = { viewModel.openLanguageIdle(selectedTech) }
                     )
                 }
 
@@ -376,6 +564,9 @@ fun MainAppContainer(
                         todayProgressMap = todayProgressMap,
                         weeklyChallengeHistory = weeklyChallengeHistory,
                         dailyStudyGoalState = dailyStudyGoalState,
+                        completedLessonIds = completedCourseLessonIds,
+                        sessions = allSessions,
+                        targetSubjectIds = targetSubjectsPreference?.subjectIds.orEmpty(),
                         getTechScore = { tech -> viewModel.getTechScore(tech) },
                         onOpenTechDetail = { tech -> viewModel.openTechDetail(tech) },
                         onOpenWeeklyAiSummary = { viewModel.openWeeklyStudySummaryModal() }
@@ -497,7 +688,147 @@ fun MainAppContainer(
                         onOpenPhotoPicker = { showSettingsPhotoDialog = true },
                         onRedoAssessment = { showInitialAssessmentDialog = true },
                         onResetStarterData = {},
-                        onSendTestNotification = { viewModel.sendTestReminderNotification() }
+                        onSendTestNotification = { viewModel.sendTestReminderNotification() },
+                        targetSubjectsCount = targetSubjectsPreference?.subjectIds?.size ?: 0,
+                        onOpenTargetSubjects = { viewModel.navigateTo(AppDestination.TARGET_SUBJECTS) },
+                        proSubscriptionState = proSubscriptionState,
+                        onOpenProSubscription = { showProSubscriptionDialog = true }
+                    )
+                }
+
+                AppDestination.TARGET_SUBJECTS -> {
+                    TargetSubjectsScreen(
+                        language = currentLanguage,
+                        savedPreference = targetSubjectsPreference,
+                        uiState = targetSubjectsUiState,
+                        isFirebaseAuthenticated = isFirebaseChatAuthenticated,
+                        isCloudSynced = isTargetSubjectsCloudSynced,
+                        getTechScore = { tech -> viewModel.getTechScore(tech) },
+                        onBack = { viewModel.navigateTo(AppDestination.HOME) },
+                        onGoogleSignInClick = { launchGoogleSignIn(null) {} },
+                        onSavePreferences = { subjectIds, dailyGoalMinutes, learningTrack, studyGoalNote ->
+                            if (isFirebaseChatAuthenticated) {
+                                viewModel.saveTargetSubjectsPreferences(
+                                    subjectIds = subjectIds,
+                                    dailyGoalMinutes = dailyGoalMinutes,
+                                    learningTrack = learningTrack,
+                                    studyGoalNote = studyGoalNote
+                                )
+                            } else {
+                                pendingTargetSubjectsDraft = TargetSubjectsDraft(
+                                    subjectIds = subjectIds,
+                                    dailyGoalMinutes = dailyGoalMinutes,
+                                    learningTrack = learningTrack,
+                                    studyGoalNote = studyGoalNote
+                                )
+                                launchGoogleSignIn(null) {}
+                            }
+                        },
+                        onClearFeedback = { viewModel.clearTargetSubjectsFeedback() },
+                        onOpenStudyTracks = { viewModel.navigateTo(AppDestination.TECH_HUB) }
+                    )
+                }
+
+                AppDestination.STUDY_STORE -> {
+                    StudyMaterialsStoreScreen(
+                        language = currentLanguage,
+                        billingStoreState = billingStoreState,
+                        productDetailsMap = studyMaterialProductDetails,
+                        ownedProductIds = ownedStudyMaterialIds,
+                        onBack = { viewModel.navigateTo(AppDestination.HOME) },
+                        onPurchasePackage = { productId ->
+                            context.findActivity()?.let { activity ->
+                                viewModel.launchStudyMaterialBilling(activity, productId)
+                            }
+                        },
+                        onRefreshCatalog = { viewModel.refreshStudyMaterialsCatalog() },
+                        onRestorePurchases = { viewModel.restorePlayPurchases() },
+                        onDismissStatusMessage = { viewModel.clearBillingStatusMessage() }
+                    )
+                }
+
+                AppDestination.LANGUAGE_IDLE -> {
+                    LanguageIdleScreen(
+                        selectedTech = idleSelectedTech,
+                        codeByTech = idleCodeByTech,
+                        resultByTech = idleResultByTech,
+                        language = currentLanguage,
+                        onSelectTech = { tech -> viewModel.selectIdleTech(tech) },
+                        onUpdateCode = { tech, code -> viewModel.updateIdleCode(tech, code) },
+                        onRunCode = { tech -> viewModel.runIdleCode(tech) },
+                        onResetCode = { tech -> viewModel.resetIdleCode(tech) },
+                        onClearOutput = { tech -> viewModel.clearIdleOutput(tech) },
+                        onBack = { viewModel.navigateTo(AppDestination.HOME) }
+                    )
+                }
+
+                AppDestination.COMMUNITY_CHAT -> {
+                    val callBanner: (@Composable () -> Unit)? = activeCallSession?.let { call ->
+                        if (call.status == ChatCallStatus.ACCEPTED && isCallMinimized) {
+                            {
+                                ActiveCallTopBanner(
+                                    callSession = call,
+                                    currentUserId = chatOwnerId,
+                                    language = currentLanguage,
+                                    onExpand = { isCallMinimized = false },
+                                    onToggleMicMute = { viewModel.toggleCallMicMute() },
+                                    onEndCall = { viewModel.declineOrEndCall() }
+                                )
+                            }
+                        } else null
+                    }
+                    val liveBanner: (@Composable () -> Unit)? = joinedLiveRoom?.let { room ->
+                        if (isLiveMinimized) {
+                            {
+                                ActiveLiveTopBanner(
+                                    liveRoom = room,
+                                    currentUserId = chatOwnerId,
+                                    language = currentLanguage,
+                                    isMicMuted = isLiveMicMuted,
+                                    elapsedSeconds = liveElapsedSeconds,
+                                    onExpand = { isLiveMinimized = false },
+                                    onToggleMicMute = { viewModel.toggleLiveMicMute() },
+                                    onLeaveOrEnd = { viewModel.leaveOrEndLiveRoom() }
+                                )
+                            }
+                        } else null
+                    }
+                    CommunityChatScreen(
+                        language = currentLanguage,
+                        currentUserId = chatOwnerId,
+                        isFirebaseAuthenticated = isFirebaseChatAuthenticated,
+                        directoryUsers = chatDirectoryUsers,
+                        leaderboardEntries = leaderboardEntries,
+                        chatRequests = chatRequests,
+                        conversations = chatConversations,
+                        activeLiveRooms = activeLiveRooms,
+                        activeChatId = activeChatId,
+                        activeMessages = activeChatMessages,
+                        isUploading = isChatUploading,
+                        statusFeedback = chatStatusFeedback,
+                        onDismissFeedback = { viewModel.dismissChatFeedback() },
+                        onGoogleSignInClick = { launchGoogleSignIn(null) {} },
+                        onOpenConversation = { chatId -> viewModel.openChatConversation(chatId) },
+                        onCloseConversation = { viewModel.closeActiveChatConversation() },
+                        onSendRequest = { recipient, intro -> viewModel.sendChatRequest(recipient, intro) },
+                        onAcceptRequest = { req -> viewModel.acceptChatRequest(req, openImmediately = true) },
+                        onDeclineOrDeleteRequest = { reqId -> viewModel.declineOrDeleteChatRequest(reqId) },
+                        onSendTextMessage = { text -> viewModel.sendChatTextMessage(text) },
+                        onSendAttachment = { uri, type, caption -> viewModel.sendChatAttachment(uri, type, caption) },
+                        onEnsureMediaLocalPath = { msg -> viewModel.ensureMessageMediaLocalPath(msg) },
+                        onOpenAttachmentExternal = { msg -> viewModel.openChatAttachmentExternal(msg) },
+                        onDeleteMessage = { msgId -> viewModel.deleteChatMessage(msgId) },
+                        onDeleteConversation = { chatId -> viewModel.deleteChatConversation(chatId) },
+                        onStartCall = { callType -> viewModel.startCall(callType) },
+                        onStartCallWithConversation = { conv, callType ->
+                            viewModel.startCallWithConversation(conv, callType)
+                        },
+                        onCreateLiveRoom = { title, techId, techLabel, desc, mode ->
+                            viewModel.createAndJoinLiveRoom(title, techId, techLabel, desc, mode)
+                        },
+                        onJoinLiveRoom = { room -> viewModel.joinLiveRoom(room) },
+                        activeCallBanner = callBanner,
+                        activeLiveBanner = liveBanner
                     )
                 }
 
@@ -525,32 +856,12 @@ fun MainAppContainer(
             scoreInfo = scoreInfo,
             streakDays = streakInfo.streakDays,
             badgesCount = allBadges.count { it.isUnlocked },
+            badges = allBadges,
             language = currentLanguage,
             isLoading = isAuthLoading,
             onGoogleSignIn = { extraPhoneNumber ->
-                coroutineScope.launch {
-                    try {
-                        val googleIdOption = GetSignInWithGoogleOption.Builder(serverClientId)
-                            .build()
-                        val request = GetCredentialRequest.Builder()
-                            .addCredentialOption(googleIdOption)
-                            .build()
-                        val result = credentialManager.getCredential(request = request, context = context)
-                        val credential = result.credential
-                        if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                            val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                            viewModel.loginWithGoogle(
-                                idToken = googleIdTokenCredential.idToken,
-                                displayName = googleIdTokenCredential.displayName,
-                                email = googleIdTokenCredential.id,
-                                photoUrl = googleIdTokenCredential.profilePictureUri?.toString(),
-                                extraPhone = extraPhoneNumber
-                            )
-                            showAuthDialog = false
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("MainActivity", "Google sign-in credential manager error: ${e.message}", e)
-                    }
+                launchGoogleSignIn(extraPhoneNumber) {
+                    showAuthDialog = false
                 }
             },
             onPhoneSignIn = { name, phone ->
@@ -612,7 +923,85 @@ fun MainAppContainer(
         com.example.ui.components.DailyLivesInfoDialog(
             livesInfo = dailyLives,
             language = currentLanguage,
+            availableXp = availableShopXp,
+            availableCrystals = availableGameCrystals,
+            onPurchaseLives = { pkg -> viewModel.purchaseLives(pkg) },
+            onOpenLifeShop = { showLifePurchaseShopDialog = true },
+            onOpen3DGame = {
+                showDailyLivesInfoDialog = false
+                viewModel.navigateTo(AppDestination.GAME_3D)
+            },
             onDismiss = { showDailyLivesInfoDialog = false }
+        )
+    }
+
+    if (showLifePurchaseShopDialog) {
+        com.example.ui.components.LifePurchaseShopDialog(
+            livesInfo = dailyLives,
+            language = currentLanguage,
+            availableXp = availableShopXp,
+            availableCrystals = availableGameCrystals,
+            proSubscriptionState = proSubscriptionState,
+            billingStoreState = billingStoreState,
+            externalConfirmedReceipt = lastLifePurchaseReceipt,
+            onPurchaseLives = { pkg, method -> viewModel.purchaseLives(pkg, method) },
+            onLaunchRealBrlPurchase = { pkg ->
+                context.findActivity()?.let { activity ->
+                    viewModel.launchLifePackBilling(activity, pkg)
+                }
+            },
+            onRestorePurchases = { viewModel.restorePlayPurchases() },
+            onClearExternalReceipt = { viewModel.clearLastLifePurchaseReceipt() },
+            onOpenProSubscription = { showProSubscriptionDialog = true },
+            onOpen3DGame = {
+                showLifePurchaseShopDialog = false
+                viewModel.navigateTo(AppDestination.GAME_3D)
+            },
+            onDismiss = {
+                viewModel.clearLastLifePurchaseReceipt()
+                viewModel.clearBillingStatusMessage()
+                showLifePurchaseShopDialog = false
+            }
+        )
+    }
+
+    if (showProSubscriptionDialog) {
+        ProSubscriptionDialog(
+            subscriptionState = proSubscriptionState,
+            dailyLives = dailyLives,
+            language = currentLanguage,
+            billingStoreState = billingStoreState,
+            onSubscribeWithPlay = {
+                context.findActivity()?.let { activity ->
+                    viewModel.launchProSubscriptionBilling(activity)
+                }
+            },
+            onRestorePurchases = { viewModel.restorePlayPurchases() },
+            onManageInPlayStore = {
+                val uri = Uri.parse(
+                    "https://play.google.com/store/account/subscriptions?sku=${ProSubscriptionPlan.PRODUCT_ID_PRO_MONTHLY}&package=${context.packageName}"
+                )
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                }
+            },
+            onDismiss = {
+                viewModel.clearBillingStatusMessage()
+                showProSubscriptionDialog = false
+            }
+        )
+    }
+
+    val currentInterstitialAd = activeModerateInterstitial
+    if (currentInterstitialAd != null && !isProSubscriber) {
+        ModerateInterstitialAdDialog(
+            ad = currentInterstitialAd,
+            language = currentLanguage,
+            onUpgradeProClick = {
+                viewModel.dismissModerateInterstitial()
+                showProSubscriptionDialog = true
+            },
+            onDismiss = { viewModel.dismissModerateInterstitial() }
         )
     }
 
@@ -637,4 +1026,54 @@ fun MainAppContainer(
             onDismiss = { viewModel.dismissLevelUpEvent() }
         )
     }
+
+    if (activeCallSession != null && !isCallMinimized) {
+        ChatCallOverlay(
+            callSession = activeCallSession,
+            currentUserId = chatOwnerId,
+            language = currentLanguage,
+            webRtcCallManager = viewModel.webRtcCallManager,
+            onAcceptCall = { viewModel.acceptIncomingCall() },
+            onDeclineOrEndCall = { viewModel.declineOrEndCall() },
+            onToggleMicMute = { viewModel.toggleCallMicMute() },
+            onToggleSpeaker = { viewModel.toggleCallSpeaker() },
+            onToggleCamera = { viewModel.toggleCallCamera() },
+            onMinimize = { isCallMinimized = true }
+        )
+    }
+
+    if (joinedLiveRoom != null && !isLiveMinimized) {
+        LiveStudyRoomOverlay(
+            liveRoom = joinedLiveRoom,
+            currentUserId = chatOwnerId,
+            language = currentLanguage,
+            messages = liveRoomMessages,
+            isMicMuted = isLiveMicMuted,
+            isCameraEnabled = isLiveCameraEnabled,
+            isSpeakerOn = isLiveSpeakerOn,
+            isPeerConnected = isLivePeerConnected,
+            elapsedSeconds = liveElapsedSeconds,
+            webRtcLiveManager = viewModel.webRtcLiveManager,
+            onSendMessage = { text, msgType -> viewModel.sendLiveRoomMessage(text, msgType) },
+            onToggleMicMute = { viewModel.toggleLiveMicMute() },
+            onToggleCamera = { viewModel.toggleLiveCamera() },
+            onToggleSpeaker = { viewModel.toggleLiveSpeaker() },
+            onLeaveOrEndLive = { viewModel.leaveOrEndLiveRoom() },
+            onMinimize = { isLiveMinimized = true }
+        )
+    }
 }
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+
+private data class TargetSubjectsDraft(
+    val subjectIds: List<String>,
+    val dailyGoalMinutes: Int,
+    val learningTrack: String,
+    val studyGoalNote: String
+)

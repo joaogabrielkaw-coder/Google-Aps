@@ -1,16 +1,20 @@
 package com.example.ui
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.R
+import com.example.billing.PlayBillingManager
 import com.example.data.ai.AiStudyService
 import com.example.data.local.AppDatabase
 import com.example.data.local.GameScoreEntity
 import com.example.data.local.RoutineWithEvents
 import com.example.data.local.StudyNoteEntity
 import com.example.data.local.UserBadgeEntity
+import com.example.data.repository.ChatRepository
 import com.example.data.repository.StudyRepository
 import com.example.data.repository.SqlLabRepository
 import com.example.data.repository.UserBadgeRepository
@@ -18,19 +22,56 @@ import com.example.data.repository.LeaderboardRepository
 import com.example.data.repository.DailyLanguageChallengeSummary
 import com.example.data.repository.FirestoreProgressRepository
 import com.example.data.repository.LanguageDailyProgress
+import com.example.data.repository.TargetSubjectsRepository
+import com.example.idle.LanguageIdleEngine
 import com.example.model.AccessibilitySettings
+import com.example.model.ActiveCallSession
 import com.example.model.AiChatMessage
 import com.example.model.AppGeneralSettings
 import com.example.model.AudioTranscriptionUiState
 import com.example.model.AuthMethod
+import com.example.model.ChatCallStatus
+import com.example.model.ChatCallType
+import com.example.model.ChatConversationItem
+import com.example.model.ChatDirectoryUser
+import com.example.model.ChatIdUtil
+import com.example.model.ChatMessageItem
+import com.example.model.ChatMessageType
+import com.example.model.ChatRequestItem
+import com.example.model.ChatRequestStatus
 import com.example.model.DeveloperLevelCatalog
 import com.example.model.FontScalePreset
+import com.example.model.IdleExecutionResult
+import com.example.model.IdleExecutionStatus
 import com.example.model.Language
+import com.example.model.LanguageIdleCatalog
+import com.example.model.LanguageIdleCodeStorage
 import com.example.model.LeaderboardEntry
 import com.example.model.LevelUpEvent
+import com.example.model.LifePaymentMethod
+import com.example.model.LifePurchaseCurrency
+import com.example.model.LifePurchaseReceipt
+import com.example.model.LifePurchaseResult
+import com.example.model.LifeShopCatalog
+import com.example.model.LifeShopPackage
+import com.example.model.LiveMessageType
+import com.example.model.LiveRoomMessage
+import com.example.model.LiveRoomMode
+import com.example.model.LiveStudyRoom
+import com.example.model.ModerateAdCatalog
+import com.example.model.ModerateAdContent
+import com.example.model.ModerateAdFrequencyPolicy
+import com.example.model.PlayBillingStoreUiState
+import com.example.model.ProSubscriptionPlan
+import com.example.model.ProSubscriptionState
+import com.android.billingclient.api.ProductDetails
 import com.example.model.RoutinePlan
 import com.example.model.SqlQueryResult
+import com.example.model.StudyMaterialPackage
 import com.example.model.StudySession
+import com.example.model.TargetSubjectsCatalog
+import com.example.model.TargetSubjectsPreference
+import com.example.model.TargetSubjectsUiState
 import com.example.model.Technology
 import com.example.model.ThemeCustomization
 import com.example.model.ThemePreference
@@ -38,11 +79,15 @@ import com.example.model.ThemePreset
 import com.example.model.ThemeSurfaceStyle
 import com.example.model.UserAccount
 import com.example.model.UserFeedbackNote
+import com.example.util.AppLocaleHelper
 import com.example.model.UserScoreInfo
 import com.example.model.WeeklySummaryUiState
 import com.example.notification.NotificationScheduler
 import com.example.notification.StudyReminderWorker
 import com.example.util.AvatarImageCodec
+import com.example.util.ChatMediaCodec
+import com.example.util.WebRtcCallManager
+import com.example.util.WebRtcLiveManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -56,6 +101,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -74,6 +120,10 @@ enum class AppDestination(val route: String) {
     AI_CHAT("ai_chat"),
     GAME_3D("game_3d"),
     SQL_STUDIO("sql_studio"),
+    COMMUNITY_CHAT("community_chat"),
+    TARGET_SUBJECTS("target_subjects"),
+    STUDY_STORE("study_store"),
+    LANGUAGE_IDLE("language_idle"),
     SETTINGS("settings")
 }
 
@@ -90,6 +140,117 @@ data class DailyLivesInfo(
 ) {
     companion object {
         const val MAX_DAILY_LIVES = 25
+        const val SUBSCRIBER_BONUS_DAILY_LIVES = 15
+        const val SUBSCRIBER_MAX_DAILY_LIVES = MAX_DAILY_LIVES + SUBSCRIBER_BONUS_DAILY_LIVES
+        const val MAX_PURCHASED_LIVES_CAP = 999
+
+        fun effectiveDailyMax(isProSubscriber: Boolean): Int =
+            if (isProSubscriber) SUBSCRIBER_MAX_DAILY_LIVES else MAX_DAILY_LIVES
+    }
+}
+
+object ProSubscriptionManager {
+    private const val KEY_PRO_ACTIVE = "pro_subscription_active"
+    private const val KEY_PRO_ACTIVATED_AT = "pro_subscription_activated_at"
+    private const val KEY_PRO_EXPIRES_AT = "pro_subscription_expires_at"
+    private const val KEY_PRO_PAYMENT_METHOD = "pro_subscription_payment_method"
+    private const val KEY_PRO_BONUS_GRANTED_DATE = "pro_subscription_bonus_granted_date_iso"
+    private const val KEY_PRO_PURCHASE_TOKEN = "pro_subscription_purchase_token"
+    private const val KEY_PRO_ORDER_ID = "pro_subscription_order_id"
+    private const val KEY_PRO_AUTO_RENEWING = "pro_subscription_auto_renewing"
+    private const val KEY_PRO_VERIFIED_BY_PLAY = "pro_subscription_verified_by_play"
+
+    fun shouldGrantImmediateBonus(
+        prefs: android.content.SharedPreferences,
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+    ): Boolean = prefs.getString(KEY_PRO_BONUS_GRANTED_DATE, null) != todayIso
+
+    fun markImmediateBonusGranted(
+        prefs: android.content.SharedPreferences,
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+    ) {
+        prefs.edit().putString(KEY_PRO_BONUS_GRANTED_DATE, todayIso).apply()
+    }
+
+    fun loadState(
+        prefs: android.content.SharedPreferences,
+        nowMillis: Long = System.currentTimeMillis()
+    ): ProSubscriptionState {
+        val activeFlag = prefs.getBoolean(KEY_PRO_ACTIVE, false)
+        val verifiedByPlay = prefs.getBoolean(KEY_PRO_VERIFIED_BY_PLAY, false)
+        val purchaseToken = prefs.getString(KEY_PRO_PURCHASE_TOKEN, null)
+        val orderId = prefs.getString(KEY_PRO_ORDER_ID, null)
+        val autoRenewing = prefs.getBoolean(KEY_PRO_AUTO_RENEWING, false)
+        val activatedAt = prefs.getLong(KEY_PRO_ACTIVATED_AT, 0L)
+        val expiresAt = prefs.getLong(KEY_PRO_EXPIRES_AT, 0L)
+        val methodName = prefs.getString(KEY_PRO_PAYMENT_METHOD, null)
+        val method = methodName?.let { name ->
+            LifePaymentMethod.entries.firstOrNull { it.name == name }
+        }
+        val hasValidToken = verifiedByPlay && !purchaseToken.isNullOrBlank()
+        val stillValid = activeFlag && hasValidToken && (expiresAt <= 0L || nowMillis < expiresAt)
+        if (activeFlag && !stillValid) {
+            prefs.edit().putBoolean(KEY_PRO_ACTIVE, false).apply()
+        }
+        return ProSubscriptionState(
+            isActive = stillValid,
+            activatedAtMillis = if (stillValid) activatedAt else 0L,
+            expiresAtMillis = if (stillValid) expiresAt else 0L,
+            paymentMethod = if (stillValid) method else null,
+            bonusDailyLives = DailyLivesInfo.SUBSCRIBER_BONUS_DAILY_LIVES,
+            monthlyPriceBrl = ProSubscriptionState.DEFAULT_PLAN.priceBrl,
+            purchaseToken = if (stillValid) purchaseToken else null,
+            orderId = if (stillValid) orderId else null,
+            isAutoRenewing = if (stillValid) autoRenewing else false,
+            verifiedByPlayBilling = stillValid
+        )
+    }
+
+    fun activateVerifiedPlaySubscription(
+        prefs: android.content.SharedPreferences,
+        purchaseToken: String,
+        orderId: String? = null,
+        purchaseTimeMillis: Long = System.currentTimeMillis(),
+        isAutoRenewing: Boolean = true,
+        nowMillis: Long = System.currentTimeMillis()
+    ): ProSubscriptionState {
+        require(purchaseToken.isNotBlank()) { "Verified Google Play purchaseToken is required." }
+        val baseTime = maxOf(purchaseTimeMillis, nowMillis)
+        val expiresAt = baseTime + ProSubscriptionState.DEFAULT_PLAN.billingPeriodDays * ProSubscriptionState.MILLIS_PER_DAY
+        prefs.edit()
+            .putBoolean(KEY_PRO_ACTIVE, true)
+            .putBoolean(KEY_PRO_VERIFIED_BY_PLAY, true)
+            .putString(KEY_PRO_PURCHASE_TOKEN, purchaseToken)
+            .putString(KEY_PRO_ORDER_ID, orderId)
+            .putBoolean(KEY_PRO_AUTO_RENEWING, isAutoRenewing)
+            .putLong(KEY_PRO_ACTIVATED_AT, purchaseTimeMillis.coerceAtLeast(1L))
+            .putLong(KEY_PRO_EXPIRES_AT, expiresAt)
+            .putString(KEY_PRO_PAYMENT_METHOD, LifePaymentMethod.GOOGLE_PLAY.name)
+            .apply()
+        return ProSubscriptionState(
+            isActive = true,
+            activatedAtMillis = purchaseTimeMillis.coerceAtLeast(1L),
+            expiresAtMillis = expiresAt,
+            paymentMethod = LifePaymentMethod.GOOGLE_PLAY,
+            bonusDailyLives = DailyLivesInfo.SUBSCRIBER_BONUS_DAILY_LIVES,
+            monthlyPriceBrl = ProSubscriptionState.DEFAULT_PLAN.priceBrl,
+            purchaseToken = purchaseToken,
+            orderId = orderId,
+            isAutoRenewing = isAutoRenewing,
+            verifiedByPlayBilling = true
+        )
+    }
+
+    fun deactivateSubscription(prefs: android.content.SharedPreferences): ProSubscriptionState {
+        prefs.edit()
+            .putBoolean(KEY_PRO_ACTIVE, false)
+            .putBoolean(KEY_PRO_VERIFIED_BY_PLAY, false)
+            .remove(KEY_PRO_PURCHASE_TOKEN)
+            .remove(KEY_PRO_ORDER_ID)
+            .putBoolean(KEY_PRO_AUTO_RENEWING, false)
+            .putLong(KEY_PRO_EXPIRES_AT, 0L)
+            .apply()
+        return ProSubscriptionState(isActive = false)
     }
 }
 
@@ -99,25 +260,34 @@ object DailyLivesManager {
 
     fun loadOrResetForDate(
         prefs: android.content.SharedPreferences,
-        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
+        dailyMaxLives: Int = DailyLivesInfo.MAX_DAILY_LIVES
     ): DailyLivesInfo {
         val savedDate = prefs.getString(KEY_LIVES_DATE, null)
         return if (savedDate != todayIso) {
+            val carriedOver = if (savedDate == null) {
+                dailyMaxLives
+            } else {
+                maxOf(
+                    prefs.getInt(KEY_LIVES_REMAINING, dailyMaxLives),
+                    dailyMaxLives
+                ).coerceIn(dailyMaxLives, DailyLivesInfo.MAX_PURCHASED_LIVES_CAP)
+            }
             prefs.edit()
-                .putInt(KEY_LIVES_REMAINING, DailyLivesInfo.MAX_DAILY_LIVES)
+                .putInt(KEY_LIVES_REMAINING, carriedOver)
                 .putString(KEY_LIVES_DATE, todayIso)
                 .apply()
             DailyLivesInfo(
-                remaining = DailyLivesInfo.MAX_DAILY_LIVES,
-                maxDaily = DailyLivesInfo.MAX_DAILY_LIVES,
+                remaining = carriedOver,
+                maxDaily = dailyMaxLives,
                 lastResetDateIso = todayIso
             )
         } else {
-            val rem = prefs.getInt(KEY_LIVES_REMAINING, DailyLivesInfo.MAX_DAILY_LIVES)
-                .coerceIn(0, DailyLivesInfo.MAX_DAILY_LIVES)
+            val rem = prefs.getInt(KEY_LIVES_REMAINING, dailyMaxLives)
+                .coerceIn(0, DailyLivesInfo.MAX_PURCHASED_LIVES_CAP)
             DailyLivesInfo(
                 remaining = rem,
-                maxDaily = DailyLivesInfo.MAX_DAILY_LIVES,
+                maxDaily = dailyMaxLives,
                 lastResetDateIso = todayIso
             )
         }
@@ -125,9 +295,10 @@ object DailyLivesManager {
 
     fun consumeOneLife(
         prefs: android.content.SharedPreferences,
-        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
+        dailyMaxLives: Int = DailyLivesInfo.MAX_DAILY_LIVES
     ): Pair<Boolean, DailyLivesInfo> {
-        val current = loadOrResetForDate(prefs, todayIso)
+        val current = loadOrResetForDate(prefs, todayIso, dailyMaxLives)
         if (current.remaining <= 0) {
             return false to current
         }
@@ -141,17 +312,74 @@ object DailyLivesManager {
 
     fun resetLivesForLevelUp(
         prefs: android.content.SharedPreferences,
-        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
+        dailyMaxLives: Int = DailyLivesInfo.MAX_DAILY_LIVES
     ): DailyLivesInfo {
+        val current = loadOrResetForDate(prefs, todayIso, dailyMaxLives)
+        val target = maxOf(current.remaining, dailyMaxLives)
         prefs.edit()
-            .putInt(KEY_LIVES_REMAINING, DailyLivesInfo.MAX_DAILY_LIVES)
+            .putInt(KEY_LIVES_REMAINING, target)
             .putString(KEY_LIVES_DATE, todayIso)
             .apply()
         return DailyLivesInfo(
-            remaining = DailyLivesInfo.MAX_DAILY_LIVES,
-            maxDaily = DailyLivesInfo.MAX_DAILY_LIVES,
+            remaining = target,
+            maxDaily = dailyMaxLives,
             lastResetDateIso = todayIso
         )
+    }
+
+    fun addPurchasedLives(
+        prefs: android.content.SharedPreferences,
+        livesToAdd: Int,
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE),
+        dailyMaxLives: Int = DailyLivesInfo.MAX_DAILY_LIVES
+    ): DailyLivesInfo {
+        val current = loadOrResetForDate(prefs, todayIso, dailyMaxLives)
+        val next = (current.remaining + livesToAdd.coerceAtLeast(0))
+            .coerceIn(0, DailyLivesInfo.MAX_PURCHASED_LIVES_CAP)
+        prefs.edit()
+            .putInt(KEY_LIVES_REMAINING, next)
+            .putString(KEY_LIVES_DATE, todayIso)
+            .apply()
+        return current.copy(remaining = next)
+    }
+
+    fun grantSubscriptionBonusLives(
+        prefs: android.content.SharedPreferences,
+        bonusLives: Int = DailyLivesInfo.SUBSCRIBER_BONUS_DAILY_LIVES,
+        todayIso: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+    ): DailyLivesInfo {
+        return addPurchasedLives(
+            prefs = prefs,
+            livesToAdd = bonusLives,
+            todayIso = todayIso,
+            dailyMaxLives = DailyLivesInfo.SUBSCRIBER_MAX_DAILY_LIVES
+        )
+    }
+}
+
+object CourseChecklistManager {
+    private const val KEY_COMPLETED_COURSE_LESSONS = "completed_course_lesson_ids"
+
+    fun loadCompletedIds(prefs: android.content.SharedPreferences): Set<String> =
+        prefs.getStringSet(KEY_COMPLETED_COURSE_LESSONS, emptySet())?.toSet() ?: emptySet()
+
+    /**
+     * Alterna a conclusão de uma aula de curso livre/vídeo apenas como controle de estudo.
+     * Não concede XP nem altera pontuação, nível ou ranking.
+     */
+    fun toggleLessonCompleted(
+        prefs: android.content.SharedPreferences,
+        currentLessons: Set<String>,
+        lessonId: String
+    ): Set<String> {
+        val updated = if (currentLessons.contains(lessonId)) {
+            currentLessons - lessonId
+        } else {
+            currentLessons + lessonId
+        }
+        prefs.edit().putStringSet(KEY_COMPLETED_COURSE_LESSONS, updated.toSet()).apply()
+        return updated
     }
 }
 
@@ -357,6 +585,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val leaderboardRepository = LeaderboardRepository(application)
     private val progressRepository = FirestoreProgressRepository(application)
     private val sqlLabRepository = SqlLabRepository(database)
+    private val chatRepository = ChatRepository(application, Firebase.auth, database.chatDao())
+    private val targetSubjectsRepository = TargetSubjectsRepository(application, Firebase.auth)
+    val webRtcCallManager = WebRtcCallManager(application)
+    val webRtcLiveManager = WebRtcLiveManager(application)
+
+    // Chat, Solicitações, Diretório de Usuários, Mídia, Ligações WebRTC & Salas Ao Vivo (Live)
+    private val _isFirebaseChatAuthenticated = MutableStateFlow(Firebase.auth.currentUser != null)
+    val isFirebaseChatAuthenticated: StateFlow<Boolean> = _isFirebaseChatAuthenticated.asStateFlow()
+
+    private val _chatOwnerId = MutableStateFlow<String?>(Firebase.auth.currentUser?.uid)
+    val chatOwnerId: StateFlow<String?> = _chatOwnerId.asStateFlow()
+
+    private val _chatDirectoryUsers = MutableStateFlow<List<ChatDirectoryUser>>(emptyList())
+    val chatDirectoryUsers: StateFlow<List<ChatDirectoryUser>> = _chatDirectoryUsers.asStateFlow()
+
+    private val _chatRequests = MutableStateFlow<List<ChatRequestItem>>(emptyList())
+    val chatRequests: StateFlow<List<ChatRequestItem>> = _chatRequests.asStateFlow()
+
+    private val _chatConversations = MutableStateFlow<List<ChatConversationItem>>(emptyList())
+    val chatConversations: StateFlow<List<ChatConversationItem>> = _chatConversations.asStateFlow()
+
+    private val _activeChatId = MutableStateFlow<String?>(null)
+    val activeChatId: StateFlow<String?> = _activeChatId.asStateFlow()
+
+    private val _activeChatMessages = MutableStateFlow<List<ChatMessageItem>>(emptyList())
+    val activeChatMessages: StateFlow<List<ChatMessageItem>> = _activeChatMessages.asStateFlow()
+
+    private val _isChatUploading = MutableStateFlow(false)
+    val isChatUploading: StateFlow<Boolean> = _isChatUploading.asStateFlow()
+
+    private val _chatStatusFeedback = MutableStateFlow<String?>(null)
+    val chatStatusFeedback: StateFlow<String?> = _chatStatusFeedback.asStateFlow()
+
+    private val _activeCallSession = MutableStateFlow<ActiveCallSession?>(null)
+    val activeCallSession: StateFlow<ActiveCallSession?> = _activeCallSession.asStateFlow()
+
+    private val _activeLiveRooms = MutableStateFlow<List<LiveStudyRoom>>(emptyList())
+    val activeLiveRooms: StateFlow<List<LiveStudyRoom>> = _activeLiveRooms.asStateFlow()
+
+    private val _joinedLiveRoom = MutableStateFlow<LiveStudyRoom?>(null)
+    val joinedLiveRoom: StateFlow<LiveStudyRoom?> = _joinedLiveRoom.asStateFlow()
+
+    private val _liveRoomMessages = MutableStateFlow<List<LiveRoomMessage>>(emptyList())
+    val liveRoomMessages: StateFlow<List<LiveRoomMessage>> = _liveRoomMessages.asStateFlow()
+
+    private val _isLiveMicMuted = MutableStateFlow(false)
+    val isLiveMicMuted: StateFlow<Boolean> = _isLiveMicMuted.asStateFlow()
+
+    private val _isLiveCameraEnabled = MutableStateFlow(true)
+    val isLiveCameraEnabled: StateFlow<Boolean> = _isLiveCameraEnabled.asStateFlow()
+
+    private val _isLiveSpeakerOn = MutableStateFlow(true)
+    val isLiveSpeakerOn: StateFlow<Boolean> = _isLiveSpeakerOn.asStateFlow()
+
+    private val _isLivePeerConnected = MutableStateFlow(false)
+    val isLivePeerConnected: StateFlow<Boolean> = _isLivePeerConnected.asStateFlow()
+
+    private val _liveElapsedSeconds = MutableStateFlow(0)
+    val liveElapsedSeconds: StateFlow<Int> = _liveElapsedSeconds.asStateFlow()
+
+    private var chatDirectoryJob: kotlinx.coroutines.Job? = null
+    private var chatRequestsJob: kotlinx.coroutines.Job? = null
+    private var localConversationsJob: kotlinx.coroutines.Job? = null
+    private var cloudConversationsJob: kotlinx.coroutines.Job? = null
+    private var localMessagesJob: kotlinx.coroutines.Job? = null
+    private var cloudMessagesJob: kotlinx.coroutines.Job? = null
+    private var callSessionsJob: kotlinx.coroutines.Job? = null
+    private var iceCandidatesJob: kotlinx.coroutines.Job? = null
+    private var callDurationTickerJob: kotlinx.coroutines.Job? = null
+    private var liveRoomsJob: kotlinx.coroutines.Job? = null
+    private var liveMessagesJob: kotlinx.coroutines.Job? = null
+    private var liveSignalsJob: kotlinx.coroutines.Job? = null
+    private var liveDurationTickerJob: kotlinx.coroutines.Job? = null
+    private var appliedAnswerForCallId: String? = null
+    private val processedIceCandidateIds = mutableSetOf<String>()
+    private val processedLiveSignalIds = mutableSetOf<String>()
 
     // User Account & Placar / Leaderboard State
     private val _userAccount = MutableStateFlow<UserAccount?>(null)
@@ -383,8 +687,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var dailyProgressJob: kotlinx.coroutines.Job? = null
     private var weeklyHistoryJob: kotlinx.coroutines.Job? = null
 
-    // Sistema de 25 vidas diárias (1 vida gasta por tentativa de tarefa; reseta ao subir de nível!)
-    private val _dailyLives = MutableStateFlow(DailyLivesManager.loadOrResetForDate(prefs))
+    // Target Subjects Cloud Preferences (Firestore /users/{uid}/preferences/target_subjects)
+    private val _targetSubjectsPreference = MutableStateFlow<TargetSubjectsPreference?>(
+        resolveInitialTargetSubjectsCache()
+    )
+    val targetSubjectsPreference: StateFlow<TargetSubjectsPreference?> = _targetSubjectsPreference.asStateFlow()
+
+    private val _isTargetSubjectsCloudSynced = MutableStateFlow(false)
+    val isTargetSubjectsCloudSynced: StateFlow<Boolean> = _isTargetSubjectsCloudSynced.asStateFlow()
+
+    private val _targetSubjectsUiState = MutableStateFlow<TargetSubjectsUiState>(TargetSubjectsUiState.Idle)
+    val targetSubjectsUiState: StateFlow<TargetSubjectsUiState> = _targetSubjectsUiState.asStateFlow()
+
+    private var targetSubjectsJob: kotlinx.coroutines.Job? = null
+
+    // Assinatura DevRoutine Pro (R$ 13/mês -> sem anúncios + 15 vidas diárias extras = 40/dia)
+    private val _proSubscriptionState = MutableStateFlow(ProSubscriptionManager.loadState(prefs))
+    val proSubscriptionState: StateFlow<ProSubscriptionState> = _proSubscriptionState.asStateFlow()
+
+    // Anúncio intersticial moderado (máximo 1 a cada 4 desafios/quizzes e cooldown de 3 min; oculto para assinantes)
+    private var completedActionsSinceLastAd = 0
+    private var lastInterstitialShownAtMillis = prefs.getLong("last_moderate_interstitial_ad_ms", 0L)
+    private var interstitialSlotCursor = 0
+    private val _activeModerateInterstitial = MutableStateFlow<ModerateAdContent?>(null)
+    val activeModerateInterstitial: StateFlow<ModerateAdContent?> = _activeModerateInterstitial.asStateFlow()
+
+    // Sistema de vidas diárias (25 base ou 40 para assinantes Pro; 1 vida por tentativa; reseta ao subir de nível!)
+    private val _dailyLives = MutableStateFlow(
+        DailyLivesManager.loadOrResetForDate(
+            prefs = prefs,
+            dailyMaxLives = DailyLivesInfo.effectiveDailyMax(_proSubscriptionState.value.isCurrentlyActive())
+        )
+    )
     val dailyLives: StateFlow<DailyLivesInfo> = _dailyLives.asStateFlow()
 
     private val _levelUpEvent = MutableStateFlow<LevelUpEvent?>(null)
@@ -394,14 +728,222 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _levelUpEvent.value = null
     }
 
+    private fun currentEffectiveDailyMax(): Int {
+        val refreshedSub = ProSubscriptionManager.loadState(prefs)
+        if (_proSubscriptionState.value != refreshedSub) {
+            _proSubscriptionState.value = refreshedSub
+        }
+        return DailyLivesInfo.effectiveDailyMax(refreshedSub.isCurrentlyActive())
+    }
+
     fun refreshDailyLivesIfNewDay() {
-        _dailyLives.value = DailyLivesManager.loadOrResetForDate(prefs)
+        _dailyLives.value = DailyLivesManager.loadOrResetForDate(
+            prefs = prefs,
+            dailyMaxLives = currentEffectiveDailyMax()
+        )
     }
 
     fun consumeLifeForAttempt(): Boolean {
-        val (consumed, updated) = DailyLivesManager.consumeOneLife(prefs)
+        val (consumed, updated) = DailyLivesManager.consumeOneLife(
+            prefs = prefs,
+            dailyMaxLives = currentEffectiveDailyMax()
+        )
         _dailyLives.value = updated
         return consumed
+    }
+
+    private val playBillingManager: PlayBillingManager by lazy {
+        PlayBillingManager(
+            context = getApplication(),
+            prefs = prefs,
+            scope = viewModelScope,
+            languageProvider = { _language.value },
+            obfuscatedAccountIdProvider = { _userAccount.value?.userId ?: Firebase.auth.currentUser?.uid },
+            onConsumableLivesGranted = { pkg, quantity, _, orderId ->
+                grantVerifiedPlayLifePack(pkg = pkg, quantity = quantity, orderId = orderId)
+            },
+            onSubscriptionVerified = { purchaseToken, orderId, purchaseTimeMillis, isAutoRenewing, userInitiated ->
+                applyVerifiedPlayProSubscription(
+                    purchaseToken = purchaseToken,
+                    orderId = orderId,
+                    purchaseTimeMillis = purchaseTimeMillis,
+                    isAutoRenewing = isAutoRenewing,
+                    userInitiated = userInitiated
+                )
+            },
+            onSubscriptionNotActiveInPlay = {
+                syncPlaySubscriptionRevokedOrExpired()
+            },
+            onStudyMaterialVerified = { pkg, _, userInitiated ->
+                if (userInitiated) {
+                    recordUserActivity()
+                    val isPt = _language.value == Language.PT
+                    _pointsFeedback.value = if (isPt) {
+                        "📚 Material desbloqueado via Google Play: ${pkg.titlePt}!"
+                    } else {
+                        "📚 Study material unlocked via Google Play: ${pkg.titleEn}!"
+                    }
+                }
+            }
+        )
+    }
+
+    val billingStoreUiState: StateFlow<PlayBillingStoreUiState> by lazy {
+        playBillingManager.storeUiState
+    }
+
+    val studyMaterialProductDetails: StateFlow<Map<String, ProductDetails>> by lazy {
+        playBillingManager.studyMaterialProductDetails
+    }
+
+    val ownedStudyMaterialIds: StateFlow<Set<String>> by lazy {
+        playBillingManager.ownedStudyMaterialIds
+    }
+
+    fun launchLifePackBilling(activity: Activity, pkg: LifeShopPackage) {
+        val productId = pkg.playProductId
+        if (pkg.currency != LifePurchaseCurrency.BRL || productId.isNullOrBlank()) {
+            return
+        }
+        playBillingManager.launchPurchase(activity, productId)
+    }
+
+    fun launchStudyMaterialBilling(activity: Activity, productId: String) {
+        if (productId.isBlank()) return
+        playBillingManager.launchPurchase(activity, productId)
+    }
+
+    fun launchProSubscriptionBilling(activity: Activity) {
+        playBillingManager.launchPurchase(activity, ProSubscriptionPlan.PRODUCT_ID_PRO_MONTHLY)
+    }
+
+    fun refreshStudyMaterialsCatalog() {
+        playBillingManager.refreshCatalogAndPurchases()
+    }
+
+    fun restorePlayPurchases() {
+        playBillingManager.restorePurchases()
+    }
+
+    fun refreshBillingOnResume() {
+        playBillingManager.refreshOnResume()
+    }
+
+    fun clearBillingStatusMessage() {
+        playBillingManager.clearStatusMessage()
+    }
+
+    private fun grantVerifiedPlayLifePack(
+        pkg: LifeShopPackage,
+        quantity: Int,
+        orderId: String?
+    ) {
+        val totalLivesToAdd = pkg.livesAmount * quantity.coerceAtLeast(1)
+        val effectiveDailyMax = currentEffectiveDailyMax()
+        val updatedLives = DailyLivesManager.addPurchasedLives(
+            prefs = prefs,
+            livesToAdd = totalLivesToAdd,
+            dailyMaxLives = effectiveDailyMax
+        )
+        _dailyLives.value = updatedLives
+        _lastLifePurchaseReceipt.value = LifePurchaseReceipt(
+            pkg = pkg,
+            newRemainingLives = updatedLives.remaining,
+            paymentMethod = LifePaymentMethod.GOOGLE_PLAY,
+            orderId = orderId,
+            quantity = quantity.coerceAtLeast(1)
+        )
+        recordUserActivity()
+        val isPt = _language.value == Language.PT
+        _pointsFeedback.value = if (isPt) {
+            "❤️ +$totalLivesToAdd vidas confirmadas via Google Play! Saldo: ${updatedLives.remaining}"
+        } else {
+            "❤️ +$totalLivesToAdd lives confirmed via Google Play! Balance: ${updatedLives.remaining}"
+        }
+    }
+
+    private fun applyVerifiedPlayProSubscription(
+        purchaseToken: String,
+        orderId: String?,
+        purchaseTimeMillis: Long,
+        isAutoRenewing: Boolean,
+        userInitiated: Boolean
+    ) {
+        val wasAlreadyActive = _proSubscriptionState.value.isCurrentlyActive()
+        val updatedSub = ProSubscriptionManager.activateVerifiedPlaySubscription(
+            prefs = prefs,
+            purchaseToken = purchaseToken,
+            orderId = orderId,
+            purchaseTimeMillis = purchaseTimeMillis,
+            isAutoRenewing = isAutoRenewing
+        )
+        _proSubscriptionState.value = updatedSub
+        _activeModerateInterstitial.value = null
+
+        val todayIso = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val grantBonusNow = !wasAlreadyActive && ProSubscriptionManager.shouldGrantImmediateBonus(prefs, todayIso)
+        val updatedLives = if (grantBonusNow) {
+            ProSubscriptionManager.markImmediateBonusGranted(prefs, todayIso)
+            DailyLivesManager.grantSubscriptionBonusLives(
+                prefs = prefs,
+                bonusLives = DailyLivesInfo.SUBSCRIBER_BONUS_DAILY_LIVES,
+                todayIso = todayIso
+            )
+        } else {
+            DailyLivesManager.loadOrResetForDate(
+                prefs = prefs,
+                todayIso = todayIso,
+                dailyMaxLives = DailyLivesInfo.SUBSCRIBER_MAX_DAILY_LIVES
+            )
+        }
+        _dailyLives.value = updatedLives
+        if (userInitiated) {
+            recordUserActivity()
+            val isPt = _language.value == Language.PT
+            _pointsFeedback.value = if (isPt) {
+                "👑 Assinatura Pro confirmada via Google Play! Sem anúncios e 40 vidas/dia (${updatedLives.remaining}/${updatedLives.maxDaily})!"
+            } else {
+                "👑 Pro Subscription verified via Google Play! Ad-free and 40 lives/day (${updatedLives.remaining}/${updatedLives.maxDaily})!"
+            }
+        }
+    }
+
+    private fun syncPlaySubscriptionRevokedOrExpired() {
+        if (!_proSubscriptionState.value.isCurrentlyActive()) return
+        val deactivated = ProSubscriptionManager.deactivateSubscription(prefs)
+        _proSubscriptionState.value = deactivated
+        _dailyLives.value = DailyLivesManager.loadOrResetForDate(
+            prefs = prefs,
+            dailyMaxLives = DailyLivesInfo.MAX_DAILY_LIVES
+        )
+    }
+
+    fun dismissModerateInterstitial() {
+        _activeModerateInterstitial.value = null
+    }
+
+    private fun maybeTriggerModerateInterstitialAd() {
+        val now = System.currentTimeMillis()
+        val sub = ProSubscriptionManager.loadState(prefs, now)
+        _proSubscriptionState.value = sub
+        if (sub.isCurrentlyActive(now)) {
+            _activeModerateInterstitial.value = null
+            return
+        }
+        completedActionsSinceLastAd += 1
+        if (
+            ModerateAdFrequencyPolicy.shouldShowInterstitial(
+                isProActive = false,
+                completedActionsSinceLastAd = completedActionsSinceLastAd,
+                lastAdShownAtMillis = lastInterstitialShownAtMillis,
+                nowMillis = now
+            )
+        ) {
+            _activeModerateInterstitial.value = ModerateAdCatalog.pickForSlot(interstitialSlotCursor++)
+            completedActionsSinceLastAd = 0
+            lastInterstitialShownAtMillis = now
+            prefs.edit().putLong("last_moderate_interstitial_ad_ms", now).apply()
+        }
     }
 
     fun setTrackerSelectedTech(tech: Technology) {
@@ -425,6 +967,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isStudyTimerActive = MutableStateFlow(false)
     val isStudyTimerActive: StateFlow<Boolean> = _isStudyTimerActive.asStateFlow()
+
+    private val _completedCourseLessonIds = MutableStateFlow<Set<String>>(loadCompletedCourseLessonIds())
+    val completedCourseLessonIds: StateFlow<Set<String>> = _completedCourseLessonIds.asStateFlow()
 
     val dailyStudyGoalState: StateFlow<DailyStudyGoalState> = combine(
         _todayScreenTimeSeconds,
@@ -489,7 +1034,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Language state
     private val _language = MutableStateFlow(
-        if (prefs.getString("app_lang", "pt") == "en") Language.EN else Language.PT
+        AppLocaleHelper.loadSavedLanguage(prefs)
     )
     val language: StateFlow<Language> = _language.asStateFlow()
 
@@ -691,6 +1236,111 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val totalGameCrystals: StateFlow<Int> = sqlLabRepository.totalGameCrystals
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    // Loja de Vidas (pacotes em R$ a qualquer momento + troca de XP livre / Cristais 3D)
+    private val _spentShopXp = MutableStateFlow(prefs.getInt("spent_shop_xp", 0).coerceAtLeast(0))
+    private val _spentGameCrystals = MutableStateFlow(prefs.getInt("spent_game_crystals", 0).coerceAtLeast(0))
+    private val _lastLifePurchaseReceipt = MutableStateFlow<LifePurchaseReceipt?>(null)
+    val lastLifePurchaseReceipt: StateFlow<LifePurchaseReceipt?> = _lastLifePurchaseReceipt.asStateFlow()
+
+    val availableShopXp: StateFlow<Int> = combine(_scoreInfo, _spentShopXp) { score, spent ->
+        (score.totalScore - spent).coerceAtLeast(0)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        (_scoreInfo.value.totalScore - _spentShopXp.value).coerceAtLeast(0)
+    )
+
+    val availableGameCrystals: StateFlow<Int> = combine(totalGameCrystals, _spentGameCrystals) { total, spent ->
+        (total - spent).coerceAtLeast(0)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun clearLastLifePurchaseReceipt() {
+        _lastLifePurchaseReceipt.value = null
+    }
+
+    fun purchaseLives(
+        pkg: LifeShopPackage,
+        paymentMethod: LifePaymentMethod? = null
+    ): LifePurchaseResult {
+        val effectiveDailyMax = currentEffectiveDailyMax()
+        val currentLives = DailyLivesManager.loadOrResetForDate(prefs, dailyMaxLives = effectiveDailyMax)
+        _dailyLives.value = currentLives
+
+        val currentAvailableXp = (_scoreInfo.value.totalScore - _spentShopXp.value).coerceAtLeast(0)
+        val currentAvailableCrystals = (totalGameCrystals.value - _spentGameCrystals.value).coerceAtLeast(0)
+        val isPt = _language.value == Language.PT
+
+        val rejection = LifeShopCatalog.evaluatePurchaseEligibility(
+            remainingLives = currentLives.remaining,
+            pkg = pkg,
+            availableXp = currentAvailableXp,
+            availableCrystals = currentAvailableCrystals
+        )
+        if (rejection != null) {
+            _pointsFeedback.value = when (rejection) {
+                is LifePurchaseResult.RequiresRealBilling -> {
+                    if (isPt) "Finalize o pagamento via Google Play Billing para receber este pacote."
+                    else "Complete payment via Google Play Billing to receive this pack."
+                }
+                is LifePurchaseResult.QuotaStillAvailable -> {
+                    if (isPt) "❤️ Você ainda tem ${rejection.remainingLives} vidas disponíveis hoje!"
+                    else "❤️ You still have ${rejection.remainingLives} lives remaining today!"
+                }
+                is LifePurchaseResult.InsufficientFunds -> {
+                    val currencyName = when (rejection.currency) {
+                        LifePurchaseCurrency.BRL -> "R$"
+                        LifePurchaseCurrency.XP -> "XP"
+                        LifePurchaseCurrency.CRYSTALS -> if (isPt) "cristais 3D" else "3D crystals"
+                    }
+                    if (isPt) {
+                        "Saldo insuficiente: precisa de ${rejection.required} $currencyName (você tem ${rejection.available})."
+                    } else {
+                        "Insufficient balance: requires ${rejection.required} $currencyName (you have ${rejection.available})."
+                    }
+                }
+                is LifePurchaseResult.Success -> null
+            }
+            return rejection
+        }
+
+        when (pkg.currency) {
+            LifePurchaseCurrency.BRL -> return LifePurchaseResult.RequiresRealBilling(pkg)
+            LifePurchaseCurrency.XP -> {
+                val updatedSpentXp = _spentShopXp.value + pkg.costAmount
+                _spentShopXp.value = updatedSpentXp
+                prefs.edit().putInt("spent_shop_xp", updatedSpentXp).apply()
+            }
+            LifePurchaseCurrency.CRYSTALS -> {
+                val updatedSpentCrystals = _spentGameCrystals.value + pkg.costAmount
+                _spentGameCrystals.value = updatedSpentCrystals
+                prefs.edit().putInt("spent_game_crystals", updatedSpentCrystals).apply()
+            }
+        }
+
+        val updatedLives = DailyLivesManager.addPurchasedLives(
+            prefs = prefs,
+            livesToAdd = pkg.livesAmount,
+            dailyMaxLives = effectiveDailyMax
+        )
+        _dailyLives.value = updatedLives
+        _lastLifePurchaseReceipt.value = LifePurchaseReceipt(
+            pkg = pkg,
+            newRemainingLives = updatedLives.remaining,
+            paymentMethod = null
+        )
+        recordUserActivity()
+        _pointsFeedback.value = if (isPt) {
+            "❤️ +${pkg.livesAmount} vidas adicionadas (${pkg.formattedPrice(_language.value)})! Saldo: ${updatedLives.remaining}"
+        } else {
+            "❤️ +${pkg.livesAmount} lives added (${pkg.formattedPrice(_language.value)})! Balance: ${updatedLives.remaining}"
+        }
+        return LifePurchaseResult.Success(
+            pkg = pkg,
+            newRemainingLives = updatedLives.remaining,
+            paymentMethod = null
+        )
+    }
+
     private val _sqlQueryResult = MutableStateFlow<SqlQueryResult?>(null)
     val sqlQueryResult: StateFlow<SqlQueryResult?> = _sqlQueryResult.asStateFlow()
 
@@ -738,7 +1388,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 durationSeconds = durationSeconds,
                 techFocusId = techFocus.id
             )
-            val bonusXp = (crystalsCollected * 10 + score / 25).coerceIn(10, 120)
+            val bonusXp = (crystalsCollected * 6 + score / 60).coerceIn(5, 75)
             val current = _scoreInfo.value
             val newScore = current.totalScore + bonusXp
             val techKey = "score_tech_${techFocus.id}"
@@ -791,6 +1441,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun currentUnlockedBadgeIds(): List<String> =
+        badgeRepository.getUnlockedBadgeIds()
+
+    private fun currentTechMinutesIdMap(): Map<String, Int> =
+        progressRepository.getCumulativeTechMinutesMap().mapKeys { it.key.id }
+
     private suspend fun evaluateBadgesInternal() {
         val sessions = allSessions.value
         val streak = streakInfo.value.streakDays
@@ -799,6 +1455,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hasAiRoutine = allRoutinesWithEvents.value.any { it.events.any { ev -> ev.aiGenerated } } || sessions.any { it.aiGenerated }
         val completedList = sessions.filter { it.isCompleted }
         val dailyCountsMap = progressRepository.getTodayChallengeCountsMap()
+        val techMinutesMap = progressRepository.getCumulativeTechMinutesMap()
         val newlyUnlocked = badgeRepository.evaluateAndSyncBadges(
             streakDays = streak,
             completedSessions = completedList,
@@ -809,7 +1466,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isAssessmentCompleted = _isInitialAssessmentCompleted.value,
             weeklyDaysCount = streak.coerceAtMost(7),
             monthlySessionsCount = completedList.size,
-            dailyChallengeCountsByTech = dailyCountsMap
+            dailyChallengeCountsByTech = dailyCountsMap,
+            techMinutes = techMinutesMap
         )
         if (newlyUnlocked.isNotEmpty()) {
             val bonusXp = newlyUnlocked.sumOf { it.xpReward }
@@ -828,12 +1486,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             val badge = newlyUnlocked.last()
+            val latestBadgeIds = currentUnlockedBadgeIds()
+            prefs.edit().putInt("user_badges_count", latestBadgeIds.size).apply()
+            _userAccount.value = _userAccount.value?.copy(badgesCount = latestBadgeIds.size)?.also {
+                saveUserAccountToPrefs(it)
+            }
             _newlyUnlockedBadge.value = badge
             val isPt = _language.value == Language.PT
             _pointsFeedback.value = if (isPt) {
                 "🏆 Selo/Emblema Desbloqueado: ${badge.titlePt} (+${bonusXp} XP)!"
             } else {
                 "🏆 Seal/Badge Unlocked: ${badge.titleEn} (+${bonusXp} XP)!"
+            }
+            if (_userAccount.value != null) {
+                syncScoreToLeaderboard()
             }
         }
     }
@@ -948,6 +1614,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     techScores = allTechScoresMap,
                     themeConfig = _themeCustomization.value
                 )
+                publishCurrentDirectoryProfileIfSignedIn()
                 _pointsFeedback.value = if (synced) {
                     if (isPt) "Foto atualizada e visível para todos no Placar!"
                     else "Profile photo updated and visible to everyone on the Leaderboard!"
@@ -963,6 +1630,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        playBillingManager.startConnectionAndSync(userInitiated = false)
         viewModelScope.launch {
             repository.populateStarterRoutinesIfEmpty()
             badgeRepository.initializeBadgesIfEmpty()
@@ -1034,7 +1702,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                         triggerBadgeEvaluation()
                         syncScoreToLeaderboard()
-                    } else if (tick.totalMinutes == 60 || tick.totalMinutes == 180 || tick.totalMinutes == 600) {
+                    } else {
                         triggerBadgeEvaluation()
                     }
                 }
@@ -1068,7 +1736,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             completedActivityIds = score.completedActivityIds,
                             completedQuizIds = score.completedQuizIds,
                             techScores = allTechScoresMap,
-                            themeConfig = _themeCustomization.value
+                            themeConfig = _themeCustomization.value,
+                            techMinutes = currentTechMinutesIdMap(),
+                            unlockedBadgeIds = currentUnlockedBadgeIds()
                         )
                     }
                 }
@@ -1076,6 +1746,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         restartLeaderboardObservation(_userAccount.value)
         restartDailyProgressObservation(_userAccount.value)
+        restartTargetSubjectsObservation()
+        restartChatSubsystem()
     }
 
     private fun setupInitialAiGreeting() {
@@ -1100,15 +1772,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recordUserActivity()
     }
 
+    fun toggleLanguage() {
+        val next = if (_language.value == Language.PT) Language.EN else Language.PT
+        setLanguage(next)
+    }
+
     fun setLanguage(lang: Language) {
+        if (_language.value == lang && AppLocaleHelper.loadSavedLanguage(prefs) == lang) return
         _language.value = lang
-        prefs.edit().putString("app_lang", lang.code).apply()
+        AppLocaleHelper.saveLanguage(prefs, lang)
         // Refresh greeting if only 1 message exists
         if (_aiMessages.value.size <= 1) {
             setupInitialAiGreeting()
         }
         // Reset cached weekly AI summary so next open renders in the newly selected language
         _weeklySummaryState.value = WeeklySummaryUiState.Idle
+        val localizedCtx = AppLocaleHelper.createLocalizedContext(getApplication(), lang)
+        val langLabel = localizedCtx.getString(
+            if (lang == Language.PT) R.string.lang_name_pt else R.string.lang_name_en
+        )
+        _pointsFeedback.value = localizedCtx.getString(R.string.lang_switched_feedback, langLabel)
     }
 
     fun updateAccessibilitySettings(updated: AccessibilitySettings) {
@@ -1123,8 +1806,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun resetAccessibilitySettings() {
         updateAccessibilitySettings(AccessibilitySettings())
-        val isPt = _language.value == Language.PT
-        _pointsFeedback.value = if (isPt) "♿ Acessibilidade restaurada para o padrão." else "♿ Accessibility reset to defaults."
+        val localizedCtx = AppLocaleHelper.createLocalizedContext(getApplication(), _language.value)
+        _pointsFeedback.value = localizedCtx.getString(R.string.settings_accessibility_reset_feedback)
     }
 
     fun updateAppGeneralSettings(updated: AppGeneralSettings) {
@@ -1559,7 +2242,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (leveledUp) {
-            val restoredLives = DailyLivesManager.resetLivesForLevelUp(prefs)
+            val effectiveMax = currentEffectiveDailyMax()
+            val restoredLives = DailyLivesManager.resetLivesForLevelUp(
+                prefs = prefs,
+                dailyMaxLives = effectiveMax
+            )
             _dailyLives.value = restoredLives
             val tier = DeveloperLevelCatalog.resolveForXp(nextScoreInfo.totalScore)
             _levelUpEvent.value = LevelUpEvent(
@@ -1571,13 +2258,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 rankBadgeEn = tier.rankBadgeEn,
                 totalXp = nextScoreInfo.totalScore,
                 nextLevelTarget = nextScoreInfo.nextLevelTarget,
-                livesRestored = DailyLivesInfo.MAX_DAILY_LIVES
+                livesRestored = effectiveMax
             )
             val isPt = _language.value == Language.PT
             _pointsFeedback.value = if (isPt) {
-                "🎉 Subiu para o Nível ${tier.levelNumber}: ${tier.titlePt}! ❤️ 25/25 vidas restauradas!"
+                "🎉 Subiu para o Nível ${tier.levelNumber}: ${tier.titlePt}! ❤️ ${effectiveMax}/${effectiveMax} vidas restauradas!"
             } else {
-                "🎉 Level Up! Level ${tier.levelNumber}: ${tier.titleEn}! ❤️ 25/25 lives restored!"
+                "🎉 Level Up! Level ${tier.levelNumber}: ${tier.titleEn}! ❤️ ${effectiveMax}/${effectiveMax} lives restored!"
             }
         }
         return leveledUp
@@ -1587,7 +2274,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recordUserActivity()
         val current = _scoreInfo.value
         val isFirstTime = !current.completedQuizIds.contains(questionId)
-        val pointsToAdd = if (isFirstTime) points else 5 // Bonus for review if already answered
+        val pointsToAdd = if (isFirstTime) points else 2 // Reduced bonus for repeating already-answered quizzes
 
         val newQuizIds = current.completedQuizIds + questionId
         val newScore = current.totalScore + pointsToAdd
@@ -1618,6 +2305,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _pointsFeedback.value = if (isPt) "+$pointsToAdd XP! Resposta Correta 🎯" else "+$pointsToAdd XP! Correct Answer 🎯"
         }
         triggerBadgeEvaluation()
+        maybeTriggerModerateInterstitialAd()
         val user = _userAccount.value
         if (user != null) {
             syncScoreToLeaderboard()
@@ -1639,7 +2327,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         recordUserActivity()
         val current = _scoreInfo.value
         val isFirstTime = !current.completedActivityIds.contains(activityId)
-        val pointsToAdd = if (isFirstTime) points else 10 // Practice repetition bonus
+        val pointsToAdd = if (isFirstTime) points else 3 // Reduced bonus for repeating already-completed activities
 
         val newActIds = current.completedActivityIds + activityId
         val newScore = current.totalScore + pointsToAdd
@@ -1693,10 +2381,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 syncScoreToLeaderboard()
             }
         }
+        maybeTriggerModerateInterstitialAd()
     }
 
     fun dismissPointsFeedback() {
         _pointsFeedback.value = null
+    }
+
+    private fun loadCompletedCourseLessonIds(): Set<String> =
+        CourseChecklistManager.loadCompletedIds(prefs)
+
+    /**
+     * Marca ou desmarca uma aula/módulo de apoio aos estudos.
+     * Importante: cursos em vídeo e aulas são apenas material de auxílio (sem ganho de XP/pontos).
+     * Pontos (XP) são ganhos apenas nas Atividades Práticas e nos Quizzes.
+     */
+    fun toggleCourseLessonCompleted(tech: Technology, lessonId: String) {
+        recordUserActivity()
+        _completedCourseLessonIds.value = CourseChecklistManager.toggleLessonCompleted(
+            prefs = prefs,
+            currentLessons = _completedCourseLessonIds.value,
+            lessonId = lessonId
+        )
     }
 
     fun getTechScore(tech: Technology): Int {
@@ -1803,6 +2509,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val remoteStreak = (remote["streakDays"] as? Number)?.toInt() ?: 0
             val remoteBadges = (remote["badgesCount"] as? Number)?.toInt() ?: 0
             val remoteTechScores = (remote["techScores"] as? Map<*, *>) ?: emptyMap<String, Any>()
+            val remoteTechMinutes = (remote["techMinutes"] as? Map<*, *>) ?: emptyMap<String, Any>()
+            val remoteUnlockedBadgeIds = (remote["unlockedBadgeIds"] as? List<*>)
+                ?.mapNotNull { it?.toString() }?.toSet() ?: emptySet()
 
             val current = _scoreInfo.value
             val finalScore = maxOf(remoteScore, current.totalScore)
@@ -1818,13 +2527,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             editor.putStringSet("completed_quiz_ids", finalQuizIds.map { it.toString() }.toSet())
             editor.putStringSet("completed_act_ids", finalActIds)
             editor.putInt("user_streak_days", maxOf(streakInfo.value.streakDays, remoteStreak))
-            editor.putInt("user_badges_count", maxOf(unlockedBadgesCount.value, remoteBadges))
+            editor.putInt("user_badges_count", maxOf(unlockedBadgesCount.value, remoteBadges, remoteUnlockedBadgeIds.size))
 
             remoteTechScores.forEach { (key, value) ->
                 val kStr = key.toString()
                 val vInt = (value as? Number)?.toInt() ?: 0
                 val localVal = prefs.getInt("score_tech_$kStr", 0)
                 editor.putInt("score_tech_$kStr", maxOf(vInt, localVal))
+            }
+
+            // Mescla horas/minutos acumulados por tecnologia e emblemas desbloqueados da nuvem
+            progressRepository.mergeRemoteTechMinutes(remoteTechMinutes)
+            if (remoteUnlockedBadgeIds.isNotEmpty()) {
+                badgeRepository.restoreUnlockedBadgeIdsFromCloud(remoteUnlockedBadgeIds)
             }
 
             // Preserva e atualiza foto garantindo preferência por URL compartilhável globalmente
@@ -1960,17 +2675,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     completedActivityIds = score.completedActivityIds,
                     completedQuizIds = score.completedQuizIds,
                     techScores = allTechScoresMap,
-                    themeConfig = _themeCustomization.value
+                    themeConfig = _themeCustomization.value,
+                    techMinutes = currentTechMinutesIdMap(),
+                    unlockedBadgeIds = currentUnlockedBadgeIds()
                 )
                 restartLeaderboardObservation(account)
                 restartDailyProgressObservation(account)
+                restartTargetSubjectsObservation()
+                restartChatSubsystem()
 
                 val isPt = _language.value == Language.PT
                 _pointsFeedback.value = if (isPt) "🎉 Bem-vindo, $resolvedName! Autenticado com Firebase e salvo no Placar."
                 else "🎉 Welcome, $resolvedName! Authenticated with Firebase and saved to Leaderboard."
 
-                // Route to main dashboard
-                _currentDestination.value = AppDestination.HOME
+                // Only auto-route to dashboard when signing in from the Login screen
+                if (_currentDestination.value == AppDestination.LOGIN) {
+                    _currentDestination.value = AppDestination.HOME
+                }
                 onSuccess()
             } catch (e: Exception) {
                 val isPt = _language.value == Language.PT
@@ -2029,10 +2750,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     completedActivityIds = score.completedActivityIds,
                     completedQuizIds = score.completedQuizIds,
                     techScores = allTechScoresMap,
-                    themeConfig = _themeCustomization.value
+                    themeConfig = _themeCustomization.value,
+                    techMinutes = currentTechMinutesIdMap(),
+                    unlockedBadgeIds = currentUnlockedBadgeIds()
                 )
                 restartLeaderboardObservation(account)
                 restartDailyProgressObservation(account)
+                restartTargetSubjectsObservation()
+                restartChatSubsystem()
 
                 val isPt = _language.value == Language.PT
                 _pointsFeedback.value = if (isPt) "🎉 Olá, $name! Telefone registrado e pontuação salva no Placar."
@@ -2056,7 +2781,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isAuthLoading.value = true
             val score = _scoreInfo.value
             val streak = streakInfo.value.streakDays
-            val badges = unlockedBadgesCount.value
+            val unlockedBadgeIds = currentUnlockedBadgeIds()
+            val badges = maxOf(unlockedBadgesCount.value, unlockedBadgeIds.size)
             val currentPhoto = ensureShareablePhotoUrl(
                 prefs.getString("auth_photo", current.photoUrl).orEmpty()
             )
@@ -2081,7 +2807,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 completedActivityIds = score.completedActivityIds,
                 completedQuizIds = score.completedQuizIds,
                 techScores = allTechScoresMap,
-                themeConfig = _themeCustomization.value
+                themeConfig = _themeCustomization.value,
+                techMinutes = currentTechMinutesIdMap(),
+                unlockedBadgeIds = unlockedBadgeIds
             )
             _isAuthLoading.value = false
             val isPt = _language.value == Language.PT
@@ -2089,10 +2817,1058 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _pointsFeedback.value = if (isPt) "⚡ Placar sincronizado com sucesso no Cloud Firestore!"
                 else "⚡ Leaderboard synced successfully to Cloud Firestore!"
             }
+            publishCurrentDirectoryProfileIfSignedIn()
         }
     }
 
+    // ==================== SISTEMA DE CHAT, ARQUIVOS & LIGAÇÕES WEBRTC ====================
+
+    private fun resolveLocalChatOwnerId(): String {
+        return Firebase.auth.currentUser?.uid
+            ?: prefs.getString("last_firebase_uid", null)?.takeIf { it.isNotBlank() }
+            ?: _userAccount.value?.userId
+            ?: ""
+    }
+
+    fun dismissChatFeedback() {
+        _chatStatusFeedback.value = null
+    }
+
+    private fun publishCurrentDirectoryProfileIfSignedIn() {
+        val fbUser = Firebase.auth.currentUser ?: return
+        prefs.edit().putString("last_firebase_uid", fbUser.uid).apply()
+        val acc = _userAccount.value
+        val score = _scoreInfo.value
+        val levelTitle = if (_language.value == Language.PT) score.levelTitlePt else score.levelTitleEn
+        val name = acc?.displayName?.takeIf { it.isNotBlank() }
+            ?: fbUser.displayName?.takeIf { it.isNotBlank() }
+            ?: fbUser.email?.substringBefore("@")
+            ?: "Dev"
+        val photo = acc?.photoUrl?.takeIf { it.isNotBlank() }
+            ?: fbUser.photoUrl?.toString()
+            ?: ""
+
+        viewModelScope.launch {
+            chatRepository.publishDirectoryProfile(
+                displayName = name,
+                photoUrl = photo,
+                levelNumber = score.levelNumber,
+                levelTitle = levelTitle,
+                totalScore = score.totalScore
+            )
+        }
+    }
+
+    fun restartChatSubsystem() {
+        chatDirectoryJob?.cancel()
+        chatRequestsJob?.cancel()
+        localConversationsJob?.cancel()
+        cloudConversationsJob?.cancel()
+        callSessionsJob?.cancel()
+        liveRoomsJob?.cancel()
+
+        val fbUid = Firebase.auth.currentUser?.uid
+        _isFirebaseChatAuthenticated.value = fbUid != null
+        if (fbUid != null) {
+            prefs.edit().putString("last_firebase_uid", fbUid).apply()
+        }
+
+        val ownerId = resolveLocalChatOwnerId()
+        _chatOwnerId.value = ownerId.ifBlank { null }
+        if (ownerId.isNotBlank()) {
+            localConversationsJob = viewModelScope.launch {
+                chatRepository.observeLocalConversations(ownerId).collect { localConvs ->
+                    _chatConversations.value = localConvs
+                }
+            }
+        } else {
+            _chatConversations.value = emptyList()
+        }
+
+        if (fbUid == null) {
+            _chatDirectoryUsers.value = emptyList()
+            _chatRequests.value = emptyList()
+            _activeLiveRooms.value = emptyList()
+            return
+        }
+
+        publishCurrentDirectoryProfileIfSignedIn()
+
+        chatDirectoryJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeDirectoryUsers().collect { users ->
+                    _chatDirectoryUsers.value = users
+                }
+            }
+        }
+
+        chatRequestsJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeChatRequests().collect { requests ->
+                    _chatRequests.value = requests
+                }
+            }
+        }
+
+        cloudConversationsJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeAndCacheCloudConversations().collect { cloudConvs ->
+                    _chatConversations.value = cloudConvs
+                }
+            }
+        }
+
+        callSessionsJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeCallSessions().collect { sessions ->
+                    handleIncomingAndUpdatedCallSessions(sessions, fbUid)
+                }
+            }
+        }
+
+        liveRoomsJob?.cancel()
+        liveRoomsJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeActiveLiveRooms().collect { rooms ->
+                    _activeLiveRooms.value = rooms
+                    val joined = _joinedLiveRoom.value
+                    if (joined != null) {
+                        val updated = rooms.firstOrNull { it.roomId == joined.roomId }
+                        if (updated == null) {
+                            cleanupLocalLiveResources()
+                            val isPt = _language.value == Language.PT
+                            _chatStatusFeedback.value = if (isPt) "A Live foi encerrada." else "The Live room has ended."
+                        } else {
+                            _joinedLiveRoom.value = updated
+                            if (updated.hostId == fbUid) {
+                                updated.participantIds
+                                    .filter { it != fbUid && !webRtcLiveManager.hasPeer(it) }
+                                    .forEach { viewerUid -> initiateHostOfferToLiveViewer(updated.roomId, viewerUid) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun openChatConversation(chatId: String) {
+        _activeChatId.value = chatId
+        localMessagesJob?.cancel()
+        cloudMessagesJob?.cancel()
+
+        localMessagesJob = viewModelScope.launch {
+            chatRepository.observeLocalMessages(chatId).collect { msgs ->
+                _activeChatMessages.value = msgs
+            }
+        }
+
+        if (Firebase.auth.currentUser != null) {
+            cloudMessagesJob = viewModelScope.launch {
+                runCatching {
+                    chatRepository.observeAndCacheCloudMessages(chatId).collect { cloudMsgs ->
+                        _activeChatMessages.value = cloudMsgs
+                    }
+                }
+            }
+        }
+        recordUserActivity()
+    }
+
+    fun closeActiveChatConversation() {
+        _activeChatId.value = null
+        localMessagesJob?.cancel()
+        cloudMessagesJob?.cancel()
+        _activeChatMessages.value = emptyList()
+    }
+
+    fun sendChatRequest(recipient: ChatDirectoryUser, introMessage: String = "") {
+        val fbUser = Firebase.auth.currentUser
+        val isPt = _language.value == Language.PT
+        if (fbUser == null) {
+            _chatStatusFeedback.value = if (isPt) "Entre com Google para enviar solicitações de conversa."
+            else "Sign in with Google to send chat requests."
+            return
+        }
+        val senderName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val senderPhoto = _userAccount.value?.photoUrl ?: fbUser.photoUrl?.toString() ?: ""
+
+        viewModelScope.launch {
+            val result = chatRepository.sendChatRequest(
+                senderName = senderName,
+                senderPhotoUrl = senderPhoto,
+                recipient = recipient,
+                introMessage = introMessage
+            )
+            _chatStatusFeedback.value = if (result.isSuccess) {
+                if (isPt) "Solicitação enviada para ${recipient.displayName}! Aguardando aceitação."
+                else "Request sent to ${recipient.displayName}! Waiting for acceptance."
+            } else {
+                if (isPt) "Não foi possível enviar solicitação agora."
+                else "Could not send request right now."
+            }
+        }
+    }
+
+    fun acceptChatRequest(request: ChatRequestItem, openImmediately: Boolean = true) {
+        val fbUser = Firebase.auth.currentUser ?: return
+        val isPt = _language.value == Language.PT
+        val accepterName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val accepterPhoto = _userAccount.value?.photoUrl ?: fbUser.photoUrl?.toString() ?: ""
+
+        viewModelScope.launch {
+            val res = chatRepository.acceptChatRequest(
+                request = request,
+                accepterName = accepterName,
+                accepterPhotoUrl = accepterPhoto
+            )
+            res.onSuccess { chatId ->
+                _chatStatusFeedback.value = if (isPt) "Conversa iniciada com ${request.peerNameFor(fbUser.uid)}!"
+                else "Chat started with ${request.peerNameFor(fbUser.uid)}!"
+                if (openImmediately) {
+                    openChatConversation(chatId)
+                }
+            }.onFailure {
+                _chatStatusFeedback.value = if (isPt) "Erro ao aceitar solicitação." else "Failed to accept request."
+            }
+        }
+    }
+
+    fun declineOrDeleteChatRequest(requestId: String) {
+        val isPt = _language.value == Language.PT
+        viewModelScope.launch {
+            val res = chatRepository.declineOrDeleteRequest(requestId)
+            if (res.isSuccess) {
+                _chatStatusFeedback.value = if (isPt) "Solicitação removida." else "Request removed."
+            }
+        }
+    }
+
+    fun sendChatTextMessage(text: String) {
+        val chatId = _activeChatId.value ?: return
+        val conv = _chatConversations.value.firstOrNull { it.chatId == chatId } ?: return
+        val fbUser = Firebase.auth.currentUser
+        val isPt = _language.value == Language.PT
+        if (fbUser == null) {
+            _chatStatusFeedback.value = if (isPt) "Entre com Google para enviar mensagens."
+            else "Sign in with Google to send messages."
+            return
+        }
+        val senderName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        viewModelScope.launch {
+            val res = chatRepository.sendTextMessage(
+                chatId = chatId,
+                peerUserId = conv.peerUserId,
+                senderName = senderName,
+                text = text
+            )
+            if (res.isFailure) {
+                _chatStatusFeedback.value = if (isPt) "Salvo localmente. Sem conexão para enviar à nuvem."
+                else "Saved locally. Cloud send failed."
+            }
+        }
+    }
+
+    fun sendChatAttachment(uri: Uri, messageType: ChatMessageType, caption: String = "") {
+        val chatId = _activeChatId.value ?: return
+        val conv = _chatConversations.value.firstOrNull { it.chatId == chatId } ?: return
+        val fbUser = Firebase.auth.currentUser
+        val isPt = _language.value == Language.PT
+        if (fbUser == null) {
+            _chatStatusFeedback.value = if (isPt) "Entre com Google para enviar mídias e arquivos."
+            else "Sign in with Google to send media & files."
+            return
+        }
+        val senderName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val messageId = java.util.UUID.randomUUID().toString()
+
+        viewModelScope.launch {
+            _isChatUploading.value = true
+            val prepared = withContext(Dispatchers.IO) {
+                when (messageType) {
+                    ChatMessageType.IMAGE -> ChatMediaCodec.encodeImageForChat(
+                        context = getApplication(),
+                        uri = uri,
+                        chatId = chatId,
+                        messageId = messageId
+                    )
+                    ChatMessageType.VIDEO -> ChatMediaCodec.prepareFileOrVideoForChat(
+                        context = getApplication(),
+                        uri = uri,
+                        chatId = chatId,
+                        messageId = messageId,
+                        isVideo = true
+                    )
+                    else -> ChatMediaCodec.prepareFileOrVideoForChat(
+                        context = getApplication(),
+                        uri = uri,
+                        chatId = chatId,
+                        messageId = messageId,
+                        isVideo = false
+                    )
+                }
+            }
+
+            if (prepared == null) {
+                _isChatUploading.value = false
+                _chatStatusFeedback.value = if (isPt) "Não foi possível ler o arquivo selecionado."
+                else "Could not read selected file."
+                return@launch
+            }
+
+            val res = chatRepository.sendMediaMessage(
+                chatId = chatId,
+                peerUserId = conv.peerUserId,
+                senderName = senderName,
+                messageType = messageType,
+                caption = caption,
+                media = prepared,
+                preGeneratedMessageId = messageId
+            )
+            _isChatUploading.value = false
+            res.onFailure { err ->
+                _chatStatusFeedback.value = if (err.message == "FILE_TOO_LARGE_FOR_FIRESTORE") {
+                    if (isPt) "Arquivo salvo localmente! Limite de envio na nuvem: até 2,6 MB."
+                    else "Saved locally! Cloud transfer supports files up to 2.6 MB."
+                } else {
+                    if (isPt) "Erro ao enviar anexo." else "Failed to upload attachment."
+                }
+            }
+        }
+    }
+
+    suspend fun ensureMessageMediaLocalPath(message: ChatMessageItem): String? {
+        return chatRepository.downloadAttachmentIfNeeded(message)
+    }
+
+    fun openChatAttachmentExternal(message: ChatMessageItem) {
+        val isPt = _language.value == Language.PT
+        viewModelScope.launch {
+            val localPath = chatRepository.downloadAttachmentIfNeeded(message)
+            if (localPath.isNullOrBlank()) {
+                _chatStatusFeedback.value = if (isPt) "Não foi possível baixar o arquivo."
+                else "Could not download file."
+                return@launch
+            }
+            val opened = ChatMediaCodec.openLocalMediaFile(
+                context = getApplication(),
+                localPath = localPath,
+                mimeType = message.mediaMimeType
+            )
+            if (!opened) {
+                _chatStatusFeedback.value = if (isPt) "Nenhum aplicativo disponível para abrir este arquivo."
+                else "No app available to open this file."
+            }
+        }
+    }
+
+    fun deleteChatMessage(messageId: String) {
+        val chatId = _activeChatId.value ?: return
+        val isPt = _language.value == Language.PT
+        viewModelScope.launch {
+            val res = chatRepository.deleteMessage(chatId, messageId)
+            _chatStatusFeedback.value = if (res.isSuccess) {
+                if (isPt) "Mensagem apagada." else "Message deleted."
+            } else {
+                if (isPt) "Mensagem apagada localmente." else "Message deleted locally."
+            }
+        }
+    }
+
+    fun deleteChatConversation(chatId: String) {
+        val isPt = _language.value == Language.PT
+        if (_activeChatId.value == chatId) {
+            closeActiveChatConversation()
+        }
+        viewModelScope.launch {
+            val res = chatRepository.deleteConversation(chatId)
+            _chatStatusFeedback.value = if (res.isSuccess) {
+                if (isPt) "Conversa deletada do aparelho e da nuvem."
+                else "Conversation deleted from device & cloud."
+            } else {
+                if (isPt) "Conversa removida localmente." else "Conversation deleted locally."
+            }
+        }
+    }
+
+    // --- Ligações de Voz e Vídeo (WebRTC + Firestore Signaling) ---
+
+    fun startCall(callType: ChatCallType) {
+        val chatId = _activeChatId.value ?: return
+        val conv = _chatConversations.value.firstOrNull { it.chatId == chatId } ?: return
+        startCallWithConversation(conv, callType)
+    }
+
+    fun startCallWithConversation(conv: ChatConversationItem, callType: ChatCallType) {
+        val fbUser = Firebase.auth.currentUser
+        val chatId = conv.chatId
+        val isPt = _language.value == Language.PT
+        if (fbUser == null) {
+            _chatStatusFeedback.value = if (isPt) "Entre com Google para fazer ligações."
+            else "Sign in with Google to place calls."
+            return
+        }
+        if (_activeCallSession.value != null) return
+
+        val callId = "call_${java.util.UUID.randomUUID().toString().replace("-", "").take(16)}"
+        val callerName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val callerPhoto = _userAccount.value?.photoUrl ?: fbUser.photoUrl?.toString() ?: ""
+
+        val initialSession = ActiveCallSession(
+            callId = callId,
+            chatId = chatId,
+            callerId = fbUser.uid,
+            callerName = callerName,
+            callerPhotoUrl = callerPhoto,
+            calleeId = conv.peerUserId,
+            calleeName = conv.peerDisplayName,
+            callType = callType,
+            status = ChatCallStatus.RINGING,
+            isOutgoing = true,
+            isSpeakerOn = callType == ChatCallType.VIDEO,
+            isCameraEnabled = callType == ChatCallType.VIDEO
+        )
+        _activeCallSession.value = initialSession
+        appliedAnswerForCallId = null
+        processedIceCandidateIds.clear()
+
+        viewModelScope.launch {
+            webRtcCallManager.startPeerSession(
+                isVideoCall = callType == ChatCallType.VIDEO,
+                onIceCandidateGenerated = { cand ->
+                    viewModelScope.launch {
+                        chatRepository.sendIceCandidate(
+                            callId = callId,
+                            peerUserId = conv.peerUserId,
+                            sdpMid = cand.sdpMid ?: "0",
+                            sdpMLineIndex = cand.sdpMLineIndex,
+                            candidate = cand.sdp
+                        )
+                    }
+                },
+                onIceConnectionStateChanged = { iceState ->
+                    val connected = iceState == org.webrtc.PeerConnection.IceConnectionState.CONNECTED ||
+                        iceState == org.webrtc.PeerConnection.IceConnectionState.COMPLETED
+                    _activeCallSession.value = _activeCallSession.value?.let { cur ->
+                        if (cur.callId == callId) cur.copy(peerConnected = connected || cur.peerConnected) else cur
+                    }
+                }
+            )
+            val offerSdp = webRtcCallManager.createOfferSdp()
+                ?: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
+
+            val res = chatRepository.createCallSession(
+                callId = callId,
+                chatId = chatId,
+                callerName = callerName,
+                callerPhotoUrl = callerPhoto,
+                calleeId = conv.peerUserId,
+                calleeName = conv.peerDisplayName,
+                callType = callType,
+                offerSdp = offerSdp
+            )
+            if (res.isFailure) {
+                cleanupLocalCallResources()
+                _chatStatusFeedback.value = if (isPt) "Erro ao iniciar ligação." else "Could not start call."
+            } else {
+                startObservingIceCandidates(callId, fbUser.uid)
+            }
+        }
+    }
+
+    fun acceptIncomingCall() {
+        val session = _activeCallSession.value ?: return
+        val fbUser = Firebase.auth.currentUser ?: return
+        processedIceCandidateIds.clear()
+
+        _activeCallSession.value = session.copy(
+            status = ChatCallStatus.ACCEPTED,
+            isSpeakerOn = session.callType == ChatCallType.VIDEO,
+            isCameraEnabled = session.callType == ChatCallType.VIDEO
+        )
+        startCallDurationTicker()
+
+        viewModelScope.launch {
+            webRtcCallManager.startPeerSession(
+                isVideoCall = session.callType == ChatCallType.VIDEO,
+                onIceCandidateGenerated = { cand ->
+                    viewModelScope.launch {
+                        chatRepository.sendIceCandidate(
+                            callId = session.callId,
+                            peerUserId = session.callerId,
+                            sdpMid = cand.sdpMid ?: "0",
+                            sdpMLineIndex = cand.sdpMLineIndex,
+                            candidate = cand.sdp
+                        )
+                    }
+                },
+                onIceConnectionStateChanged = { iceState ->
+                    val connected = iceState == org.webrtc.PeerConnection.IceConnectionState.CONNECTED ||
+                        iceState == org.webrtc.PeerConnection.IceConnectionState.COMPLETED
+                    _activeCallSession.value = _activeCallSession.value?.let { cur ->
+                        if (cur.callId == session.callId) cur.copy(peerConnected = connected || cur.peerConnected) else cur
+                    }
+                }
+            )
+            val answerSdp = webRtcCallManager.createAnswerSdp(session.offerSdp)
+                ?: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
+
+            chatRepository.updateCallSessionStatus(
+                callId = session.callId,
+                status = ChatCallStatus.ACCEPTED,
+                answerSdp = answerSdp
+            )
+            startObservingIceCandidates(session.callId, fbUser.uid)
+        }
+    }
+
+    fun declineOrEndCall() {
+        val session = _activeCallSession.value ?: return
+        val fbUser = Firebase.auth.currentUser
+        val nextStatus = if (!session.isOutgoing && session.status == ChatCallStatus.RINGING) {
+            ChatCallStatus.DECLINED
+        } else {
+            ChatCallStatus.ENDED
+        }
+        val duration = session.elapsedSeconds
+        val isPt = _language.value == Language.PT
+
+        cleanupLocalCallResources()
+
+        if (fbUser != null) {
+            viewModelScope.launch {
+                chatRepository.updateCallSessionStatus(session.callId, nextStatus)
+                if (session.chatId.isNotBlank() && session.isOutgoing) {
+                    val mins = duration / 60
+                    val secs = duration % 60
+                    val formatted = String.format(java.util.Locale.US, "%02d:%02d", mins, secs)
+                    val label = when {
+                        nextStatus == ChatCallStatus.DECLINED ->
+                            if (isPt) "Chamada recusada" else "Call declined"
+                        duration > 0 ->
+                            if (isPt) "Chamada (${if (session.callType == ChatCallType.VIDEO) "Vídeo" else "Voz"}) • $formatted"
+                            else "${if (session.callType == ChatCallType.VIDEO) "Video" else "Voice"} call • $formatted"
+                        else ->
+                            if (isPt) "Chamada não atendida" else "Unanswered call"
+                    }
+                    val senderName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+                    chatRepository.recordCallLogMessage(
+                        chatId = session.chatId,
+                        peerUserId = session.peerId(fbUser.uid),
+                        senderName = senderName,
+                        callType = session.callType,
+                        durationSeconds = duration,
+                        summaryText = label
+                    )
+                }
+            }
+        }
+    }
+
+    fun toggleCallMicMute() {
+        val current = _activeCallSession.value ?: return
+        val muted = !current.isMicMuted
+        webRtcCallManager.setMicMuted(muted)
+        _activeCallSession.value = current.copy(isMicMuted = muted)
+    }
+
+    fun toggleCallSpeaker() {
+        val current = _activeCallSession.value ?: return
+        val speaker = !current.isSpeakerOn
+        webRtcCallManager.configureAudioRouting(speaker)
+        _activeCallSession.value = current.copy(isSpeakerOn = speaker)
+    }
+
+    fun toggleCallCamera() {
+        val current = _activeCallSession.value ?: return
+        val cam = !current.isCameraEnabled
+        webRtcCallManager.setCameraEnabled(cam)
+        _activeCallSession.value = current.copy(isCameraEnabled = cam)
+    }
+
+    private fun handleIncomingAndUpdatedCallSessions(sessions: List<ActiveCallSession>, currentUid: String) {
+        val current = _activeCallSession.value
+        val isPt = _language.value == Language.PT
+
+        if (current == null) {
+            val incomingRinging = sessions.firstOrNull {
+                !it.isOutgoing && it.status == ChatCallStatus.RINGING && it.calleeId == currentUid
+            }
+            if (incomingRinging != null) {
+                _activeCallSession.value = incomingRinging
+            }
+            return
+        }
+
+        val remote = sessions.firstOrNull { it.callId == current.callId } ?: return
+        if (remote.status == ChatCallStatus.DECLINED ||
+            remote.status == ChatCallStatus.ENDED ||
+            remote.status == ChatCallStatus.MISSED
+        ) {
+            cleanupLocalCallResources()
+            _chatStatusFeedback.value = when (remote.status) {
+                ChatCallStatus.DECLINED -> if (isPt) "Chamada recusada." else "Call declined."
+                else -> if (isPt) "Chamada encerrada." else "Call ended."
+            }
+            return
+        }
+
+        if (remote.status == ChatCallStatus.ACCEPTED) {
+            if (current.isOutgoing && remote.answerSdp.isNotBlank() && appliedAnswerForCallId != remote.callId) {
+                appliedAnswerForCallId = remote.callId
+                webRtcCallManager.applyRemoteAnswerSdp(remote.answerSdp)
+                startCallDurationTicker()
+            }
+            _activeCallSession.value = current.copy(
+                status = ChatCallStatus.ACCEPTED,
+                answerSdp = remote.answerSdp,
+                peerConnected = true
+            )
+        }
+    }
+
+    private fun startObservingIceCandidates(callId: String, currentUid: String) {
+        iceCandidatesJob?.cancel()
+        iceCandidatesJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeIceCandidates(callId).collect { list ->
+                    list.forEach { cand ->
+                        if (cand.senderId != currentUid && processedIceCandidateIds.add(cand.candidateId)) {
+                            webRtcCallManager.addRemoteIceCandidate(
+                                sdpMid = cand.sdpMid,
+                                sdpMLineIndex = cand.sdpMLineIndex,
+                                candidate = cand.candidate
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startCallDurationTicker() {
+        if (callDurationTickerJob?.isActive == true) return
+        callDurationTickerJob = viewModelScope.launch {
+            while (isActive && _activeCallSession.value?.status == ChatCallStatus.ACCEPTED) {
+                delay(1_000L)
+                _activeCallSession.value = _activeCallSession.value?.let {
+                    it.copy(elapsedSeconds = it.elapsedSeconds + 1)
+                }
+            }
+        }
+    }
+
+    private fun cleanupLocalCallResources() {
+        iceCandidatesJob?.cancel()
+        iceCandidatesJob = null
+        callDurationTickerJob?.cancel()
+        callDurationTickerJob = null
+        appliedAnswerForCallId = null
+        processedIceCandidateIds.clear()
+        webRtcCallManager.endSession()
+        _activeCallSession.value = null
+    }
+
+    // --- Salas Ao Vivo (Live de Estudo & Discussão de Conteúdos) ---
+
+    fun createAndJoinLiveRoom(
+        title: String,
+        topicTechId: String,
+        topicLabel: String,
+        description: String,
+        mode: LiveRoomMode
+    ) {
+        val fbUser = Firebase.auth.currentUser
+        val isPt = _language.value == Language.PT
+        if (fbUser == null) {
+            _chatStatusFeedback.value = if (isPt) "Entre com Google para iniciar uma Live."
+            else "Sign in with Google to start a Live room."
+            return
+        }
+        val hostName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val hostPhoto = _userAccount.value?.photoUrl ?: fbUser.photoUrl?.toString() ?: ""
+
+        viewModelScope.launch {
+            val res = chatRepository.createLiveRoom(
+                title = title,
+                topicTechId = topicTechId,
+                topicLabel = topicLabel,
+                description = description,
+                liveMode = mode,
+                hostName = hostName,
+                hostPhotoUrl = hostPhoto
+            )
+            res.onSuccess { room ->
+                enterJoinedLiveRoom(room, fbUser.uid, isHost = true)
+                chatRepository.sendLiveMessage(
+                    roomId = room.roomId,
+                    senderName = hostName,
+                    senderPhotoUrl = hostPhoto,
+                    text = if (isPt) "Iniciou a Live sobre ${room.topicLabel}!"
+                    else "Started Live discussion on ${room.topicLabel}!",
+                    messageType = LiveMessageType.SYSTEM
+                )
+            }.onFailure {
+                _chatStatusFeedback.value = if (isPt) "Erro ao iniciar a Live." else "Failed to start Live room."
+            }
+        }
+        recordUserActivity()
+    }
+
+    fun joinLiveRoom(room: LiveStudyRoom) {
+        val fbUser = Firebase.auth.currentUser
+        val isPt = _language.value == Language.PT
+        if (fbUser == null) {
+            _chatStatusFeedback.value = if (isPt) "Entre com Google para participar da Live."
+            else "Sign in with Google to join the Live room."
+            return
+        }
+        val userName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val userPhoto = _userAccount.value?.photoUrl ?: fbUser.photoUrl?.toString() ?: ""
+
+        viewModelScope.launch {
+            val res = chatRepository.joinLiveRoom(room.roomId, userName)
+            res.onSuccess {
+                enterJoinedLiveRoom(room, fbUser.uid, isHost = room.hostId == fbUser.uid)
+                chatRepository.sendLiveMessage(
+                    roomId = room.roomId,
+                    senderName = userName,
+                    senderPhotoUrl = userPhoto,
+                    text = if (isPt) "entrou na discussão ao vivo." else "joined the live discussion.",
+                    messageType = LiveMessageType.SYSTEM
+                )
+            }.onFailure {
+                _chatStatusFeedback.value = if (isPt) "Não foi possível entrar na Live." else "Could not join Live room."
+            }
+        }
+        recordUserActivity()
+    }
+
+    private fun enterJoinedLiveRoom(room: LiveStudyRoom, currentUid: String, isHost: Boolean) {
+        cleanupLocalLiveResources()
+        _joinedLiveRoom.value = room
+        _isLiveMicMuted.value = !isHost
+        _isLiveCameraEnabled.value = isHost && room.liveMode == LiveRoomMode.VIDEO
+        _isLiveSpeakerOn.value = true
+        _isLivePeerConnected.value = false
+        _liveElapsedSeconds.value = 0
+
+        webRtcLiveManager.startLocalMedia(
+            enableVideo = isHost && room.liveMode == LiveRoomMode.VIDEO,
+            speakerOn = true
+        )
+        webRtcLiveManager.setMicMuted(!isHost)
+
+        startLiveMessagesObservation(room.roomId)
+        startLiveSignalsObservation(room.roomId, currentUid)
+        startLiveDurationTicker()
+    }
+
+    private fun initiateHostOfferToLiveViewer(roomId: String, viewerUid: String) {
+        viewModelScope.launch {
+            val pc = webRtcLiveManager.getOrCreatePeerConnection(
+                remoteUid = viewerUid,
+                onIceCandidateGenerated = { cand ->
+                    viewModelScope.launch {
+                        chatRepository.sendLiveSignal(
+                            roomId = roomId,
+                            toUid = viewerUid,
+                            type = "ice",
+                            sdpMid = cand.sdpMid ?: "0",
+                            sdpMLineIndex = cand.sdpMLineIndex,
+                            candidate = cand.sdp
+                        )
+                    }
+                },
+                onConnectionChanged = { connected ->
+                    if (connected) _isLivePeerConnected.value = true
+                }
+            ) ?: return@launch
+            val offerSdp = webRtcLiveManager.createOfferForPeer(viewerUid) ?: return@launch
+            chatRepository.sendLiveSignal(
+                roomId = roomId,
+                toUid = viewerUid,
+                type = "offer",
+                sdp = offerSdp
+            )
+        }
+    }
+
+    private fun startLiveMessagesObservation(roomId: String) {
+        liveMessagesJob?.cancel()
+        liveMessagesJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeLiveMessages(roomId).collect { msgs ->
+                    _liveRoomMessages.value = msgs
+                }
+            }
+        }
+    }
+
+    private fun startLiveSignalsObservation(roomId: String, currentUid: String) {
+        liveSignalsJob?.cancel()
+        processedLiveSignalIds.clear()
+        liveSignalsJob = viewModelScope.launch {
+            runCatching {
+                chatRepository.observeLiveSignals(roomId).collect { signals ->
+                    signals.forEach { sig ->
+                        if (sig.toUid == currentUid && processedLiveSignalIds.add(sig.signalId)) {
+                            when (sig.type) {
+                                "offer" -> {
+                                    webRtcLiveManager.getOrCreatePeerConnection(
+                                        remoteUid = sig.fromUid,
+                                        onIceCandidateGenerated = { cand ->
+                                            viewModelScope.launch {
+                                                chatRepository.sendLiveSignal(
+                                                    roomId = roomId,
+                                                    toUid = sig.fromUid,
+                                                    type = "ice",
+                                                    sdpMid = cand.sdpMid ?: "0",
+                                                    sdpMLineIndex = cand.sdpMLineIndex,
+                                                    candidate = cand.sdp
+                                                )
+                                            }
+                                        },
+                                        onConnectionChanged = { connected ->
+                                            if (connected) _isLivePeerConnected.value = true
+                                        }
+                                    )
+                                    val answer = webRtcLiveManager.createAnswerForPeer(sig.fromUid, sig.sdp)
+                                    if (!answer.isNullOrBlank()) {
+                                        chatRepository.sendLiveSignal(
+                                            roomId = roomId,
+                                            toUid = sig.fromUid,
+                                            type = "answer",
+                                            sdp = answer
+                                        )
+                                    }
+                                }
+                                "answer" -> {
+                                    webRtcLiveManager.applyRemoteAnswerForPeer(sig.fromUid, sig.sdp)
+                                    _isLivePeerConnected.value = true
+                                }
+                                "ice" -> {
+                                    webRtcLiveManager.addRemoteIceCandidate(
+                                        remoteUid = sig.fromUid,
+                                        sdpMid = sig.sdpMid,
+                                        sdpMLineIndex = sig.sdpMLineIndex,
+                                        candidate = sig.candidate
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startLiveDurationTicker() {
+        liveDurationTickerJob?.cancel()
+        liveDurationTickerJob = viewModelScope.launch {
+            while (isActive && _joinedLiveRoom.value != null) {
+                delay(1_000L)
+                _liveElapsedSeconds.value = _liveElapsedSeconds.value + 1
+            }
+        }
+    }
+
+    fun sendLiveRoomMessage(text: String, messageType: LiveMessageType = LiveMessageType.TEXT) {
+        val room = _joinedLiveRoom.value ?: return
+        val fbUser = Firebase.auth.currentUser ?: return
+        val userName = _userAccount.value?.displayName?.ifBlank { fbUser.displayName ?: "Dev" } ?: "Dev"
+        val userPhoto = _userAccount.value?.photoUrl ?: fbUser.photoUrl?.toString() ?: ""
+        viewModelScope.launch {
+            chatRepository.sendLiveMessage(
+                roomId = room.roomId,
+                senderName = userName,
+                senderPhotoUrl = userPhoto,
+                text = text,
+                messageType = messageType
+            )
+        }
+        recordUserActivity()
+    }
+
+    fun toggleLiveMicMute() {
+        val next = !_isLiveMicMuted.value
+        webRtcLiveManager.setMicMuted(next)
+        _isLiveMicMuted.value = next
+    }
+
+    fun toggleLiveCamera() {
+        val next = !_isLiveCameraEnabled.value
+        webRtcLiveManager.setCameraEnabled(next)
+        _isLiveCameraEnabled.value = next
+    }
+
+    fun toggleLiveSpeaker() {
+        val next = !_isLiveSpeakerOn.value
+        webRtcLiveManager.configureAudioRouting(next)
+        _isLiveSpeakerOn.value = next
+    }
+
+    fun leaveOrEndLiveRoom() {
+        val room = _joinedLiveRoom.value ?: return
+        val uid = Firebase.auth.currentUser?.uid
+        val isHost = uid != null && uid == room.hostId
+        cleanupLocalLiveResources()
+        viewModelScope.launch {
+            chatRepository.leaveOrEndLiveRoom(room.roomId, isHost = isHost)
+        }
+    }
+
+    private fun cleanupLocalLiveResources() {
+        liveMessagesJob?.cancel()
+        liveMessagesJob = null
+        liveSignalsJob?.cancel()
+        liveSignalsJob = null
+        liveDurationTickerJob?.cancel()
+        liveDurationTickerJob = null
+        processedLiveSignalIds.clear()
+        webRtcLiveManager.endLiveSession()
+        _joinedLiveRoom.value = null
+        _liveRoomMessages.value = emptyList()
+        _isLivePeerConnected.value = false
+        _liveElapsedSeconds.value = 0
+    }
+
+    // ==================== PREFERÊNCIAS DE MATÉRIAS DE FOCO (FIRESTORE) ====================
+
+    private fun resolveInitialTargetSubjectsCache(): TargetSubjectsPreference? {
+        val cacheKey = Firebase.auth.currentUser?.uid
+            ?: prefs.getString("last_firebase_uid", null)?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("auth_user_id", null)?.takeIf { it.isNotBlank() }
+            ?: return null
+        return targetSubjectsRepository.loadLocalPreferences(cacheKey)
+    }
+
+    fun restartTargetSubjectsObservation() {
+        targetSubjectsJob?.cancel()
+        targetSubjectsJob = null
+
+        val fbUid = Firebase.auth.currentUser?.uid
+        if (fbUid == null) {
+            _isTargetSubjectsCloudSynced.value = false
+            val cached = resolveInitialTargetSubjectsCache()
+            if (cached != null) {
+                _targetSubjectsPreference.value = cached
+            }
+            return
+        }
+
+        prefs.edit().putString("last_firebase_uid", fbUid).apply()
+        targetSubjectsRepository.loadLocalPreferences(fbUid)?.let { local ->
+            _targetSubjectsPreference.value = local
+        }
+
+        targetSubjectsJob = viewModelScope.launch {
+            targetSubjectsRepository.observeTargetSubjects()
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    android.util.Log.w("MainViewModel", "Target subjects stream error: ${error.message}")
+                    val isPt = _language.value == Language.PT
+                    if (Firebase.auth.currentUser?.uid == fbUid) {
+                        _isTargetSubjectsCloudSynced.value = false
+                        _targetSubjectsUiState.value = TargetSubjectsUiState.Error(
+                            if (isPt) "Não foi possível sincronizar suas matérias com a nuvem."
+                            else "Could not sync target subjects from cloud."
+                        )
+                    }
+                }
+                .collect { remotePref ->
+                    if (remotePref != null) {
+                        _targetSubjectsPreference.value = remotePref
+                        _isTargetSubjectsCloudSynced.value = true
+                    } else {
+                        _isTargetSubjectsCloudSynced.value = true
+                    }
+                }
+        }
+    }
+
+    fun saveTargetSubjectsPreferences(
+        subjectIds: List<String>,
+        dailyGoalMinutes: Int,
+        learningTrack: String,
+        studyGoalNote: String
+    ) {
+        val isPt = _language.value == Language.PT
+        val fbUid = Firebase.auth.currentUser?.uid
+        if (fbUid.isNullOrBlank()) {
+            _targetSubjectsUiState.value = TargetSubjectsUiState.Error(
+                if (isPt) "Entre com Google para salvar suas matérias no Cloud Firestore."
+                else "Sign in with Google to save your target subjects in Cloud Firestore."
+            )
+            return
+        }
+
+        val cleanIds = TargetSubjectsCatalog.normalizeSubjectIds(subjectIds)
+        if (cleanIds.isEmpty()) {
+            _targetSubjectsUiState.value = TargetSubjectsUiState.Error(
+                if (isPt) "Selecione pelo menos 1 matéria para continuar."
+                else "Select at least 1 target subject to continue."
+            )
+            return
+        }
+
+        recordUserActivity()
+        viewModelScope.launch {
+            _targetSubjectsUiState.value = TargetSubjectsUiState.Saving
+            val result = targetSubjectsRepository.saveTargetSubjects(
+                subjectIds = cleanIds,
+                dailyGoalMinutes = dailyGoalMinutes,
+                learningTrack = learningTrack,
+                studyGoalNote = studyGoalNote
+            )
+            result.onSuccess { savedPref ->
+                _targetSubjectsPreference.value = savedPref
+                _isTargetSubjectsCloudSynced.value = true
+                if (_trackerSelectedTech.value.id !in savedPref.subjectIds) {
+                    savedPref.selectedTechnologies().firstOrNull()?.let { firstTech ->
+                        _trackerSelectedTech.value = firstTech
+                    }
+                }
+                _targetSubjectsUiState.value = TargetSubjectsUiState.Success(
+                    if (isPt) "${savedPref.subjectIds.size} matérias salvas no Firestore!"
+                    else "${savedPref.subjectIds.size} target subjects saved to Firestore!"
+                )
+            }.onFailure { err ->
+                _isTargetSubjectsCloudSynced.value = false
+                _targetSubjectsUiState.value = TargetSubjectsUiState.Error(
+                    err.localizedMessage ?: if (isPt) "Erro ao salvar preferências no Firestore."
+                    else "Failed to save preferences to Firestore."
+                )
+            }
+        }
+    }
+
+    fun clearTargetSubjectsFeedback() {
+        if (_targetSubjectsUiState.value !is TargetSubjectsUiState.Saving) {
+            _targetSubjectsUiState.value = TargetSubjectsUiState.Idle
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        playBillingManager.endConnection()
+        targetSubjectsJob?.cancel()
+        cleanupLocalCallResources()
+        cleanupLocalLiveResources()
+    }
+
     fun signOut() {
+        targetSubjectsJob?.cancel()
+        targetSubjectsJob = null
+        _targetSubjectsPreference.value = null
+        _isTargetSubjectsCloudSynced.value = false
+        _targetSubjectsUiState.value = TargetSubjectsUiState.Idle
+        cleanupLocalCallResources()
+        cleanupLocalLiveResources()
+        liveRoomsJob?.cancel()
+        liveRoomsJob = null
+        _activeLiveRooms.value = emptyList()
+        closeActiveChatConversation()
         try {
             Firebase.auth.signOut()
         } catch (e: Exception) {
@@ -2102,6 +3878,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         saveUserAccountToPrefs(null)
         restartLeaderboardObservation(null)
         restartDailyProgressObservation(null)
+        restartChatSubsystem()
         val isPt = _language.value == Language.PT
         _pointsFeedback.value = if (isPt) "Sessão encerrada com sucesso." else "Signed out successfully."
         _currentDestination.value = AppDestination.LOGIN
@@ -2117,5 +3894,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .remove("user_last_known_level")
             .apply()
         _scoreInfo.value = calculateScoreInfo(0, 0, 0, emptySet(), emptySet())
+    }
+
+    // -------------------------------------------------------------------------
+    // Dedicated IDLEs for all 12 Programming Languages
+    // -------------------------------------------------------------------------
+
+    private val _idleSelectedTech = MutableStateFlow(Technology.PYTHON)
+    val idleSelectedTech: StateFlow<Technology> = _idleSelectedTech.asStateFlow()
+
+    private val _idleCodeByTech = MutableStateFlow(
+        Technology.entries.associateWith { tech ->
+            LanguageIdleCodeStorage.loadCode(prefs, tech)
+        }
+    )
+    val idleCodeByTech: StateFlow<Map<Technology, String>> = _idleCodeByTech.asStateFlow()
+
+    private val _idleResultByTech = MutableStateFlow<Map<Technology, IdleExecutionResult>>(emptyMap())
+    val idleResultByTech: StateFlow<Map<Technology, IdleExecutionResult>> = _idleResultByTech.asStateFlow()
+
+    fun selectIdleTech(tech: Technology) {
+        _idleSelectedTech.value = tech
+        recordUserActivity()
+    }
+
+    fun openLanguageIdle(tech: Technology = _trackerSelectedTech.value) {
+        _idleSelectedTech.value = tech
+        _currentDestination.value = AppDestination.LANGUAGE_IDLE
+        recordUserActivity()
+    }
+
+    fun updateIdleCode(tech: Technology, code: String) {
+        _idleCodeByTech.value = _idleCodeByTech.value + (tech to code)
+        LanguageIdleCodeStorage.saveCode(prefs, tech, code)
+        recordUserActivity()
+    }
+
+    fun resetIdleCode(tech: Technology) {
+        val defaultCode = LanguageIdleCodeStorage.resetToDefault(prefs, tech)
+        _idleCodeByTech.value = _idleCodeByTech.value + (tech to defaultCode)
+        _idleResultByTech.value = _idleResultByTech.value - tech
+        recordUserActivity()
+    }
+
+    fun clearIdleOutput(tech: Technology) {
+        _idleResultByTech.value = _idleResultByTech.value - tech
+        recordUserActivity()
+    }
+
+    fun runIdleCode(tech: Technology) {
+        val codeToRun = _idleCodeByTech.value[tech]
+            ?: LanguageIdleCatalog.getSpec(tech).templates.first().code
+        _idleResultByTech.value = _idleResultByTech.value + (
+            tech to IdleExecutionResult(
+                tech = tech,
+                status = IdleExecutionStatus.RUNNING
+            )
+        )
+        recordUserActivity()
+
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                LanguageIdleEngine.execute(
+                    tech = tech,
+                    rawCode = codeToRun,
+                    language = _language.value,
+                    sqlLabRepository = sqlLabRepository
+                )
+            }
+            _idleResultByTech.value = _idleResultByTech.value + (tech to result)
+        }
     }
 }

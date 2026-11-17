@@ -1,3 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DevRoutine AI</string>
+    <string name="app_topbar_subtitle">Python • SQL • Java &amp; DBs</string>
+
+    <!-- Navigation & Top Bar -->
+    <string name="nav_home">Home</string>
+    <string name="nav_techs">Techs</string>
+    <string name="nav_progress">Progress</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_ai">AI Tutor</string>
+    <string name="nav_chat">Chat</string>
+    <string name="nav_chat_live_desc">Chat &amp; Live</string>
+
+    <string name="action_community_chat">Community Chat &amp; Calls</string>
+    <string name="action_leaderboard">Developer Leaderboard</string>
+    <string name="action_sign_in_profile">Sign in / Profile</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_toggle_language">Switch language (PT / EN)</string>
+    <string name="common_copy_code">Copy Code</string>
+    <string name="common_back">Back</string>
+    <string name="common_remove">Remove</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_all">All</string>
+    <string name="common_practice">Practice</string>
+    <string name="common_tasks">tasks</string>
+    <string name="common_lessons">Lessons</string>
+    <string name="common_challenges">Challenges</string>
+    <string name="common_quiz">Quiz</string>
+    <string name="common_sessions">Sessions</string>
+    <string name="common_days_count">%1$d days</string>
+    <string name="common_today">today</string>
+    <string name="common_target_badge">Target</string>
+
+    <!-- Language Identifiers & Toggle -->
+    <string name="lang_short_pt">PT-BR</string>
+    <string name="lang_short_en">EN-US</string>
+    <string name="lang_chip_pt">PT</string>
+    <string name="lang_chip_en">EN</string>
+    <string name="lang_name_pt">Portuguese (Brazil)</string>
+    <string name="lang_name_en">English</string>
+    <string name="lang_switched_feedback">Language switched to %1$s</string>
+
+    <!-- Login Screen -->
+    <string name="login_hero_title">Your Dev Ecosystem</string>
+    <string name="login_hero_subtitle">Practice 1,260+ challenges, climb the global leaderboard with Cloud Firestore, and boost your journey with AI.</string>
+    <string name="login_feature_challenges_title">1,260+ Balanced Coding Challenges</string>
+    <string name="login_feature_challenges_desc">35 Beginner, 35 Intermediate &amp; 35 Advanced across all 12 technologies.</string>
+    <string name="login_feature_leaderboard_title">Real-time Developer Leaderboard</string>
+    <string name="login_feature_leaderboard_desc">Cloud-backed sync with XP, dev levels, and collectible badges.</string>
+    <string name="login_feature_firestore_title">Daily Tracking in Cloud Firestore</string>
+    <string name="login_feature_firestore_desc">Track your daily study routines safely backed by Firebase.</string>
+    <string name="login_error_missing_google_config">Google Sign-In configuration missing in project.</string>
+    <string name="login_error_unexpected_credential">Unexpected credential type</string>
+    <string name="login_error_auth_failed">Authentication failed</string>
+    <string name="login_signing_in">Signing in…</string>
+    <string name="login_sign_in_google">Sign in with Google</string>
+    <string name="login_phone_toggle">Or sign in with phone number</string>
+    <string name="login_phone_card_title">Quick Phone Sign-In</string>
+    <string name="login_phone_name_label">Your Name / Dev Handle</string>
+    <string name="login_phone_number_label">Phone number (with area code)</string>
+    <string name="login_phone_invalid_error">Please enter a valid phone number</string>
+    <string name="login_phone_enter_btn">Enter with Phone</string>
+    <string name="login_or">or</string>
+    <string name="login_guest_continue">Explore first (Guest Mode)</string>
+    <string name="login_security_note">Protected by Firebase Auth &amp; App Check</string>
+
+    <!-- Home Screen -->
+    <string name="home_level_short">Lv %1$d</string>
+    <string name="home_streak_cd">Streak</string>
+    <string name="home_max_level_reached">Max Level Reached!</string>
+    <string name="home_xp_left_next_level">%1$d XP left for Lv %2$d</string>
+    <string name="home_level_restores_lives">❤️ Leveling up restores all 25 lives</string>
+    <string name="home_view_ranks">View Ranks</string>
+    <string name="home_view_ranks_cd">View level roadmap</string>
+    <string name="home_today_total_timer">Today: %1$s • Total: %2$dm</string>
+    <string name="home_timer_live">Live</string>
+    <string name="home_timer_idle">Idle</string>
+    <string name="home_diagnostic_title">🎯 Initial Dev Diagnostic (Optional)</string>
+    <string name="home_diagnostic_desc">✨ Not mandatory • Tap anytime to calibrate your level and earn title + badge!</string>
+    <string name="home_stat_total_xp">Total XP</string>
+    <string name="home_stat_activities_done">Activities Done</string>
+    <string name="home_stat_quizzes_solved">Quizzes Solved</string>
+
+    <string name="home_lab_3d_game">3D Game</string>
+    <string name="home_lab_sql_db">SQL DB</string>
+    <string name="home_lab_voice_ai">Voice AI</string>
+    <string name="home_lab_themes">Themes</string>
+
+    <string name="home_store_title">Study Materials Store</string>
+    <string name="home_store_subtitle">Algorithms, SQL Mastery &amp; Backend Interview packs • Google Play</string>
+    <string name="home_store_action">Shop</string>
+
+    <string name="home_idles_title">Coding IDLEs (12)</string>
+    <string name="home_idles_subtitle">Syntax-highlighted editor &amp; runtime for Python, JS, TS, Kotlin, Java, Go, SQL &amp; Web</string>
+    <string name="home_idles_badge">IDLE</string>
+
+    <string name="home_leaderboard_title">Developer Leaderboard</string>
+    <string name="home_leaderboard_subtitle">See online ranking, sign in with Google/Phone &amp; sync points</string>
+    <string name="home_chat_title">Community Chat &amp; Calls</string>
+    <string name="home_chat_pending_requests">%1$d pending chat request(s) to accept</string>
+    <string name="home_chat_subtitle">Search users, share photos, videos, files &amp; make calls</string>
+    <string name="home_chat_open_cd">Open Chat &amp; Calls</string>
+
+    <string name="home_calendar_title">Study Calendar</string>
+    <string name="home_prev_month_cd">Previous month</string>
+    <string name="home_next_month_cd">Next month</string>
+    <string name="home_sessions_for">Sessions for %1$s • %2$s</string>
+    <string name="home_sessions_on">Sessions on %1$s</string>
+    <string name="home_sessions_completed_ratio">%1$d/%2$d completed</string>
+    <string name="home_no_sessions_for_tech">No %1$s sessions for today.</string>
+    <string name="home_no_sessions_day">No study sessions on this day.</string>
+    <string name="home_schedule_btn">Schedule</string>
+
+    <string name="home_routines_title">Saved Study Routines</string>
+    <string name="home_routines_for_tech">Routines for %1$s</string>
+    <string name="home_routines_empty_tech">No routines containing %1$s in the database.</string>
+    <string name="home_routines_empty">No routines saved in the database yet.</string>
+    <string name="home_routines_create_ai_tech">Create %1$s Routine with AI</string>
+    <string name="home_routines_create_ai">Generate Routine with AI</string>
+    <string name="home_new_routine_btn">+ New Routine</string>
+    <string name="home_routine_duration">%1$d days • %2$d min/day</string>
+    <string name="home_routine_sessions_done">%1$d of %2$d sessions done</string>
+    <string name="home_routine_calendar_btn">Calendar</string>
+    <string name="home_routine_ai_btn">Practice AI</string>
+
+    <string name="home_filter_title">Filter by Language</string>
+    <string name="home_filter_subtitle">Focus on routines for specific languages to practice today</string>
+    <string name="home_filter_showing_for">Showing routines for %1$s</string>
+    <string name="home_filter_counts">%1$d sessions • %2$d routines</string>
+
+    <string name="home_daily_progress_title">Daily Study Progress</string>
+    <string name="home_daily_progress_goal_sub">Goal: %1$d min • Auto-calculated from active timer</string>
+    <string name="home_daily_goal_reached">🎉 Goal Reached!</string>
+    <string name="home_daily_goal_percent">%1$d%% completed</string>
+    <string name="home_daily_timer_running">Activity timer running live</string>
+    <string name="home_daily_timer_paused">Paused on inactivity (interact to resume)</string>
+    <string name="home_daily_minutes_ratio">%1$d of %2$d active min</string>
+    <string name="home_daily_great_consistency">Great consistency! 🔥</string>
+    <string name="home_daily_remaining_today">%1$dm %2$ds left today</string>
+    <string name="home_metric_active_time">Active Time</string>
+    <string name="home_metric_live">live tracking</string>
+    <string name="home_metric_paused">paused</string>
+    <string name="home_metric_activities">Activities</string>
+    <string name="home_metric_challenges_quiz">challenges/quiz</string>
+    <string name="home_metric_xp_today">XP Today</string>
+    <string name="home_metric_points">points</string>
+    <string name="home_practiced_today">Practiced languages today:</string>
+    <string name="home_daily_auto_notice">Daily goal is tracked automatically from real app usage time.</string>
+    <string name="home_weekly_ai_summary_btn">✨ AI Weekly Study Summary (7-Day Feedback)</string>
+
+    <string name="home_ai_suggestions_title">AI Study Suggestions</string>
+    <string name="home_ai_suggestions_sub">Recommended for %1$s</string>
+    <string name="home_ai_filter_sql_db">SQL &amp; DB</string>
+    <string name="home_practice_with_ai">Practice with AI</string>
+    <string name="home_view_challenges">Challenges</string>
+
+    <string name="home_target_subjects_title">Target Subjects</string>
+    <string name="home_target_subjects_empty">Choose your focus subjects &amp; save to Firestore</string>
+    <string name="home_target_subjects_count">%1$d subjects selected in your plan</string>
+    <string name="home_target_select">Select</string>
+    <string name="home_target_edit">Edit</string>
+
+    <string name="home_learning_tracks_title">Learning Tracks (%1$d)</string>
+    <string name="home_learning_tracks_sub">Supported technologies grid</string>
+    <string name="home_learning_tracks_view_all">View all</string>
+
+    <!-- Language Task Progress Tracker -->
+    <string name="tracker_section_title">Study Task Progress by Language</string>
+    <string name="tracker_section_subtitle">%1$d of %2$d study tasks done • %3$d/12 started</string>
+    <string name="tracker_overall_name">Overall</string>
+    <string name="tracker_filter_all">All (%1$d)</string>
+    <string name="tracker_filter_started">Started (%1$d)</string>
+    <string name="tracker_filter_target">Target</string>
+    <string name="tracker_filter_languages">Languages</string>
+    <string name="tracker_filter_databases">Databases</string>
+    <string name="tracker_empty_title">No completed study tasks in this filter yet.</string>
+    <string name="tracker_empty_desc">Complete a course lesson, coding challenge, or quiz in any language to watch its ring grow.</string>
+    <string name="tracker_empty_cta">Practice Python</string>
+    <string name="tracker_card_tasks_ratio">%1$d / %2$d tasks</string>
+    <string name="tracker_breakdown_cd">Task breakdown</string>
+    <string name="tracker_home_title">Progress by Language</string>
+    <string name="tracker_home_subtitle">%1$d/%2$d study tasks (%3$d%%)</string>
+    <string name="tracker_home_analytics">Analytics</string>
+
+    <!-- Progress Screen -->
+    <string name="progress_title">Progress Analytics</string>
+    <string name="progress_subtitle">Track your score evolution and mastery over time across each programming language and database.</string>
+    <string name="progress_timeframe_7d">Last 7 Days</string>
+    <string name="progress_timeframe_30d">30 Days</string>
+    <string name="progress_timeframe_overall">Overall</string>
+    <string name="progress_screentime_title">⏱️ Screen-Time Daily Goal</string>
+    <string name="progress_screentime_sub">Auto-calculated from real user activity</string>
+    <string name="progress_screentime_today">Today: %1$s / %2$s (%3$d%%)</string>
+    <string name="progress_screentime_total">Total: %1$d min</string>
+    <string name="progress_level_prefix">Lv %1$d • %2$s</string>
+    <string name="progress_max_level_xp">Max Level Reached (%1$d XP)</string>
+    <string name="progress_xp_left_level">%1$d XP left for Level %2$d</string>
+    <string name="progress_level_restores">Level-up restores 25 lives</string>
+    <string name="progress_all_ranks">All 12 Ranks</string>
+    <string name="progress_open_roadmap_cd">Open level roadmap</string>
+    <string name="progress_xp_chart_title">📈 Score Evolution Over Time</string>
+    <string name="progress_xp_chart_sub">Cumulative XP earned through practice and quizzes</string>
+    <string name="progress_mastery_title">📊 Mastery by Language &amp; Database</string>
+    <string name="progress_mastery_sub">XP earned in each technology track</string>
+    <string name="progress_mastery_max">Max: 180 XP/track</string>
+    <string name="progress_difficulty_title">🎯 Activities by Difficulty</string>
+    <string name="progress_difficulty_sub">Balanced distribution across all 3 calibrated levels</string>
+    <string name="progress_difficulty_beginner">Beginner</string>
+    <string name="progress_difficulty_intermediate">Intermediate</string>
+    <string name="progress_difficulty_advanced">Advanced</string>
+    <string name="progress_firestore_title">🔥 Daily Cloud Firestore Record</string>
+    <string name="progress_firestore_sub">Cloud-persisted progress per selected language today</string>
+
+    <!-- Study Tracks Hub -->
+    <string name="tech_hub_title">Study Tracks</string>
+    <string name="tech_hub_subtitle">Select a technology to explore guides, hands-on practice, cheatsheets, roadmap, and scored quizzes.</string>
+    <string name="tech_hub_store_btn">Store</string>
+    <string name="tech_hub_focus_btn">Focus</string>
+    <string name="tech_hub_cat_target">Target (%1$d)</string>
+    <string name="tech_hub_cat_all">All (%1$d)</string>
+    <string name="tech_hub_cat_lang_web">Languages &amp; Web (%1$d)</string>
+    <string name="tech_hub_cat_db">Databases (%1$d)</string>
+
+    <!-- Language IDLEs Screen -->
+    <string name="idle_screen_title">Language IDLEs</string>
+    <string name="idle_screen_subtitle">Dedicated editor &amp; runtime for all 12 programming languages</string>
+    <string name="idle_badge_count">12 IDLEs</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings Hub</string>
+    <string name="settings_subtitle">Accessibility, language localization, theme &amp; feedbacks in one place</string>
+    <string name="settings_lang_card_title">App Language</string>
+    <string name="settings_lang_card_subtitle">Switch dynamically between Portuguese and English using Android localized resources</string>
+    <string name="settings_lang_toggle_label">Use English (EN-US)</string>
+    <string name="settings_lang_toggle_desc">Turn on for English (`values/strings.xml`) or off for Portuguese (`values-pt/strings.xml`)</string>
+    <string name="settings_lang_live_preview">Live sample: Your tabs, menus, and buttons update immediately without restarting the app.</string>
+    <string name="settings_lang_active_res_badge">Active resource: res/values/strings.xml (en)</string>
+
+    <string name="settings_accessibility_title">Accessibility</string>
+    <string name="settings_accessibility_subtitle">Tune text size, contrast and visual comfort for your needs</string>
+    <string name="settings_text_size">Text Size</string>
+    <string name="settings_text_size_preview">Preview: Learning code every day feels even more comfortable!</string>
+    <string name="settings_high_contrast_title">High Contrast Borders</string>
+    <string name="settings_high_contrast_desc">Strengthens card and button outlines for sharper readability</string>
+    <string name="settings_reduce_motion_title">Reduce Motion</string>
+    <string name="settings_reduce_motion_desc">Minimizes continuous sparkles and pulsing motion effects</string>
+    <string name="settings_haptic_title">Haptic Feedback</string>
+    <string name="settings_haptic_desc">Gentle tactile vibration when tapping buttons and quizzes</string>
+    <string name="settings_reset_accessibility">Reset Accessibility Defaults</string>
+    <string name="settings_accessibility_reset_feedback">♿ Accessibility reset to defaults.</string>
+
+    <string name="settings_theme_title">Theme &amp; Color Options</string>
+    <string name="settings_theme_synced">Saved to your account &amp; locally</string>
+    <string name="settings_theme_local">Saved locally on this device</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_active_palette">Active Palette</string>
+    <string name="settings_default_palette">Purple &amp; Crimson (Primary Default)</string>
+    <string name="settings_custom_palette">Custom (%1$s)</string>
+    <string name="settings_preset_palettes">Preset Palettes (Quick Pick)</string>
+    <string name="settings_full_palette_btn">Full Palette &amp; Customize</string>
+    <string name="settings_reset_btn">Reset</string>
+
+    <string name="settings_general_title">General App Settings</string>
+    <string name="settings_general_subtitle">Profile, language, notifications and study timer behavior</string>
+    <string name="settings_default_dev_name">Developer</string>
+    <string name="settings_default_dev_level">Aspiring Dev</string>
+    <string name="settings_photo_btn">Photo</string>
+    <string name="settings_redo_diagnostic_btn">Initial Dev Diagnostic (Optional • 5 Challenges)</string>
+    <string name="settings_target_subjects_count">Target Subjects (%1$d selected)</string>
+    <string name="settings_target_subjects_choose">Choose Target Subjects (Firestore)</string>
+    <string name="settings_idle_pause_title">Study Timer Inactivity Auto-Pause</string>
+    <string name="settings_idle_pause_desc">Automatically pauses active study tracking when idle for:</string>
+    <string name="settings_idle_min_default">%1$d min (Default)</string>
+    <string name="settings_idle_min">%1$d min</string>
+    <string name="settings_daily_reminders_title">Daily Study Reminders (WorkManager)</string>
+    <string name="settings_daily_reminders_desc">Local push notifications 15 min before scheduled Calendar sessions</string>
+    <string name="settings_test_notification_btn">Send Test Notification</string>
+
+    <string name="settings_covered_techs_title">Covered Technologies &amp; Features</string>
+    <string name="settings_covered_techs_body">• Languages &amp; Web: Python, SQL, HTML, CSS, Java, JavaScript, TypeScript, Kotlin, Go\n• Databases: MySQL, PostgreSQL, MongoDB &amp; SQLite Studio\n• Artificial Intelligence: DevTutor AI, Weekly Summary &amp; Voice Transcription\n• Local Notifications: WorkManager (Jetpack)</string>
+
+    <string name="settings_feedbacks_title">About Feedbacks</string>
+    <string name="settings_feedbacks_subtitle">Understand and customize celebrations, gentle retry hints and AI feedback</string>
+    <string name="settings_feedbacks_how_title">How do feedbacks work in DevRoutine?</string>
+    <string name="settings_feedbacks_how_body">• Victories: Completing challenges or quizzes triggers celebratory XP feedback alongside your 25 daily lives.\n• Gentle retries: Mistakes show encouraging hints so you can try again smoothly.\n• Weekly AI Feedback: Reviews your 7-day history with personalized next-week recommendations.</string>
+    <string name="settings_celebration_title">Victory Celebration Dialogs</string>
+    <string name="settings_celebration_desc">Shows decorated celebration dialog when solving challenges or quizzes</string>
+    <string name="settings_gentle_retry_title">Gentle Retry Encouragement</string>
+    <string name="settings_gentle_retry_desc">Displays supportive try-again hints whenever an answer misses</string>
+    <string name="settings_xp_banners_title">XP &amp; Badge Toast Banners</string>
+    <string name="settings_xp_banners_desc">Shows floating banners whenever XP or focus milestones are earned</string>
+    <string name="settings_open_weekly_ai_btn">✨ Open My AI Weekly Feedback</string>
+    <string name="settings_send_feedback_title">Send App Feedback or Suggestion</string>
+    <string name="settings_rating_label">Rating:</string>
+    <string name="settings_feedback_input_label">Share your experience or suggestion…</string>
+    <string name="settings_submit_feedback_btn">Submit Feedback</string>
+    <string name="settings_feedback_saved_banner">Feedback saved! Thank you for helping shape DevRoutine 💜</string>
+    <string name="settings_recent_feedbacks">Your recent feedbacks (%1$d)</string>
 </resources>

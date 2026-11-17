@@ -26,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowForward
@@ -42,11 +44,16 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrackChanges
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -74,16 +81,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.local.RoutineWithEvents
 import com.example.data.local.UserBadgeEntity
 import com.example.data.repository.LanguageDailyProgress
 import com.example.model.AiSuggestedTopic
 import com.example.model.AiStudyTopicsCatalog
 import com.example.model.Language
+import com.example.model.LanguageTaskProgressCalculator
+import com.example.model.ModerateAdCatalog
 import com.example.model.StudySession
 import com.example.model.Technology
 import com.example.model.UserScoreInfo
@@ -92,9 +103,12 @@ import com.example.ui.DailyScreenTimeManager
 import com.example.ui.DailyStudyGoalState
 import com.example.ui.UiStreakInfo
 import com.example.ui.components.DailyStudyProgressTrackerCard
+import com.example.ui.components.HomeLanguageProgressStripCard
 import com.example.ui.components.LevelRoadmapDialog
+import com.example.ui.components.ModerateInlineAdBanner
 import com.example.ui.components.UserBadgesCompactRow
 import com.example.ui.theme.LocalDevRoutineColors
+import com.example.util.AppLocaleHelper
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -128,19 +142,40 @@ fun HomeScreen(
     getTechScore: (Technology) -> Int = { 0 },
     onPromptAiTopic: (Technology, String) -> Unit = { _, _ -> },
     dailyLives: com.example.ui.DailyLivesInfo = com.example.ui.DailyLivesInfo(),
+    pendingChatRequestsCount: Int = 0,
+    isProSubscriber: Boolean = false,
+    onOpenProSubscription: () -> Unit = {},
+    targetSubjectIds: List<String> = emptyList(),
+    completedLessonIds: Set<String> = emptySet(),
+    onOpenTargetSubjects: () -> Unit = {},
     onOpenLivesInfo: () -> Unit = {},
+    onOpenLifeShop: () -> Unit = {},
     onOpenWeeklyAiSummary: () -> Unit = {},
     onSelectDate: (String) -> Unit,
     onToggleSession: (StudySession) -> Unit,
     onOpenTech: (Technology) -> Unit,
+    onToggleLanguage: () -> Unit = {},
     onNavigate: (AppDestination) -> Unit
 ) {
     val isPt = language == Language.PT
+    val languageProgressSummaries = remember(
+        scoreInfo.completedActivityIds,
+        scoreInfo.completedQuizIds,
+        completedLessonIds,
+        sessions
+    ) {
+        LanguageTaskProgressCalculator.computeAll(
+            completedActivityIds = scoreInfo.completedActivityIds,
+            completedQuizIds = scoreInfo.completedQuizIds,
+            completedLessonIds = completedLessonIds,
+            sessions = sessions
+        )
+    }
     val currentSelectedDate = remember(selectedDateIso) {
         try { LocalDate.parse(selectedDateIso) } catch (e: Exception) { LocalDate.now() }
     }
     var currentYearMonth by remember { mutableStateOf(YearMonth.from(currentSelectedDate)) }
-    val locale = if (isPt) Locale("pt", "BR") else Locale.ENGLISH
+    val locale = AppLocaleHelper.toLocale(language)
 
     // Language filter state for daily routines and sessions
     var selectedLanguageFilter by remember { mutableStateOf<Technology?>(null) }
@@ -193,7 +228,8 @@ fun HomeScreen(
                 isPt = isPt,
                 onOpenAi = { onNavigate(AppDestination.AI_CHAT) },
                 onStartInitialAssessment = onStartInitialAssessment,
-                onOpenLevelRoadmap = { showLevelRoadmapDialog = true }
+                onOpenLevelRoadmap = { showLevelRoadmapDialog = true },
+                onToggleLanguage = onToggleLanguage
             )
         }
 
@@ -203,7 +239,8 @@ fun HomeScreen(
                 com.example.ui.components.DailyLivesBannerCard(
                     livesInfo = dailyLives,
                     language = language,
-                    onClick = onOpenLivesInfo
+                    onClick = onOpenLivesInfo,
+                    onAddLivesClick = onOpenLifeShop
                 )
             }
         }
@@ -248,7 +285,7 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Default.SportsEsports, contentDescription = null, tint = RedAccent, modifier = Modifier.size(22.dp))
                         Text(
-                            text = if (isPt) "Jogo & 3D" else "3D Game",
+                            text = stringResource(R.string.home_lab_3d_game),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
@@ -272,7 +309,7 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Default.Storage, contentDescription = null, tint = PurplePrimary, modifier = Modifier.size(22.dp))
                         Text(
-                            text = if (isPt) "Banco SQL" else "SQL DB",
+                            text = stringResource(R.string.home_lab_sql_db),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
@@ -296,7 +333,7 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Default.Mic, contentDescription = null, tint = Color(0xFF00ACC1), modifier = Modifier.size(22.dp))
                         Text(
-                            text = if (isPt) "Voz & IA" else "Voice AI",
+                            text = stringResource(R.string.home_lab_voice_ai),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
@@ -323,11 +360,159 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(22.dp))
                         Text(
-                            text = if (isPt) "Cores" else "Themes",
+                            text = stringResource(R.string.home_lab_themes),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
+                    }
+                }
+            }
+        }
+
+        // 2c. Study Materials Store (Google Play Billing)
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Brush.linearGradient(listOf(PurplePrimary.copy(alpha = 0.65f), Color(0xFF10B981).copy(alpha = 0.65f)))
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clickable { onNavigate(AppDestination.STUDY_STORE) }
+                    .testTag("card_home_launch_study_store")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.linearGradient(listOf(PurplePrimary, Color(0xFF10B981)))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.home_store_title),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold)
+                        )
+                        Text(
+                            text = stringResource(R.string.home_store_subtitle),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF16A34A).copy(alpha = 0.16f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingCart,
+                                contentDescription = null,
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.home_store_action),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF16A34A)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2d. Language IDLEs Hub (Dedicated interactive IDLEs for all 12 programming languages)
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    Brush.linearGradient(listOf(Color(0xFF00ACC1).copy(alpha = 0.7f), PurplePrimary.copy(alpha = 0.7f)))
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clickable { onNavigate(AppDestination.LANGUAGE_IDLE) }
+                    .testTag("card_home_launch_language_idles")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Brush.linearGradient(listOf(Color(0xFF00ACC1), PurplePrimary))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Terminal,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.home_idles_title),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold)
+                        )
+                        Text(
+                            text = stringResource(R.string.home_idles_subtitle),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF00ACC1).copy(alpha = 0.16f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color(0xFF00ACC1),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.home_idles_badge),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00ACC1)
+                            )
+                        }
                     }
                 }
             }
@@ -346,11 +531,36 @@ fun HomeScreen(
             }
         }
 
-        // 4. Layout de grade para as tecnologias suportadas (8 tecnologias)
+        // 3b. Target Subjects Cloud Focus Card
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                TargetSubjectsHomeCard(
+                    targetSubjectIds = targetSubjectIds,
+                    language = language,
+                    onOpenTargetSubjects = onOpenTargetSubjects,
+                    onOpenTech = onOpenTech
+                )
+            }
+        }
+
+        // 3c. Visual Circular Study Task Progress Tracker per Language
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                HomeLanguageProgressStripCard(
+                    summaries = languageProgressSummaries,
+                    language = language,
+                    onOpenTech = onOpenTech,
+                    onOpenFullAnalytics = { onNavigate(AppDestination.PROGRESS) }
+                )
+            }
+        }
+
+        // 4. Layout de grade para as tecnologias suportadas
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 TechGridSection(
                     allTechs = Technology.entries,
+                    targetSubjectIds = targetSubjectIds,
                     getTechScore = getTechScore,
                     todayProgressMap = todayProgressMap,
                     language = language,
@@ -414,12 +624,11 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = if (isPt) "Placar de Desenvolvedores" else "Developer Leaderboard",
+                                    text = stringResource(R.string.home_leaderboard_title),
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                                 )
                                 Text(
-                                    text = if (isPt) "Veja o ranking online, entre com Google/Telefone e salve seus pontos"
-                                    else "See online ranking, sign in with Google/Phone & sync points",
+                                    text = stringResource(R.string.home_leaderboard_subtitle),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -431,6 +640,90 @@ fun HomeScreen(
                             tint = PurplePrimary,
                             modifier = Modifier.size(18.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // 2b2. Community Chat, Media & Calls Banner
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = Brush.linearGradient(listOf(Color(0xFF00ACC1), PurplePrimary)),
+                        width = 1.dp
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigate(AppDestination.COMMUNITY_CHAT) }
+                        .testTag("banner_home_community_chat")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(Brush.linearGradient(listOf(Color(0xFF00ACC1), PurplePrimary))),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Chat,
+                                    contentDescription = stringResource(R.string.home_chat_open_cd),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = stringResource(R.string.home_chat_title),
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                                Text(
+                                    text = if (pendingChatRequestsCount > 0) {
+                                        stringResource(R.string.home_chat_pending_requests, pendingChatRequestsCount)
+                                    } else {
+                                        stringResource(R.string.home_chat_subtitle)
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (pendingChatRequestsCount > 0) RedAccent else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (pendingChatRequestsCount > 0) {
+                                Badge(
+                                    containerColor = RedAccent,
+                                    contentColor = Color.White
+                                ) {
+                                    Text(
+                                        text = pendingChatRequestsCount.toString(),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = Color(0xFF00ACC1),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -476,7 +769,7 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = if (isPt) "Calendário de Estudos" else "Study Calendar",
+                                text = stringResource(R.string.home_calendar_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                             )
                             Text(
@@ -493,13 +786,21 @@ fun HomeScreen(
                             onClick = { currentYearMonth = currentYearMonth.minusMonths(1) },
                             modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Mês anterior", modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.home_prev_month_cd),
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                         IconButton(
                             onClick = { currentYearMonth = currentYearMonth.plusMonths(1) },
                             modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Próximo mês", modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = stringResource(R.string.home_next_month_cd),
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
@@ -538,21 +839,26 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val formattedDate = currentSelectedDate.format(DateTimeFormatter.ofPattern("dd/MM"))
                     val heading = if (selectedLanguageFilter != null) {
-                        (if (isPt) "Sessões de " else "Sessions for ") +
-                                selectedLanguageFilter!!.displayName +
-                                " • " + currentSelectedDate.format(DateTimeFormatter.ofPattern("dd/MM"))
+                        stringResource(
+                            R.string.home_sessions_for,
+                            selectedLanguageFilter!!.displayName,
+                            formattedDate
+                        )
                     } else {
-                        (if (isPt) "Sessões em " else "Sessions on ") +
-                                currentSelectedDate.format(DateTimeFormatter.ofPattern("dd/MM"))
+                        stringResource(R.string.home_sessions_on, formattedDate)
                     }
                     Text(
                         text = heading,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "${filteredDaySessions.count { it.isCompleted }}/${filteredDaySessions.size} " +
-                                if (isPt) "concluídas" else "completed",
+                        text = stringResource(
+                            R.string.home_sessions_completed_ratio,
+                            filteredDaySessions.count { it.isCompleted },
+                            filteredDaySessions.size
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -576,11 +882,12 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             val emptyMsg = if (selectedLanguageFilter != null) {
-                                if (isPt) "Nenhuma sessão de ${selectedLanguageFilter!!.displayName} para hoje."
-                                else "No ${selectedLanguageFilter!!.displayName} sessions for today."
+                                stringResource(
+                                    R.string.home_no_sessions_for_tech,
+                                    selectedLanguageFilter!!.displayName
+                                )
                             } else {
-                                if (isPt) "Nenhuma sessão agendada para este dia."
-                                else "No study sessions on this day."
+                                stringResource(R.string.home_no_sessions_day)
                             }
                             Text(
                                 text = emptyMsg,
@@ -593,7 +900,7 @@ fun HomeScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 modifier = Modifier.testTag("button_open_calendar_home")
                             ) {
-                                Text(if (isPt) "Agendar" else "Schedule", fontSize = 11.sp)
+                                Text(stringResource(R.string.home_schedule_btn), fontSize = 11.sp)
                             }
                         }
                     }
@@ -636,10 +943,9 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         val routineTitle = if (selectedLanguageFilter != null) {
-                            if (isPt) "Rotinas de ${selectedLanguageFilter!!.displayName}"
-                            else "${selectedLanguageFilter!!.displayName} Routines"
+                            stringResource(R.string.home_routines_for_tech, selectedLanguageFilter!!.displayName)
                         } else {
-                            if (isPt) "Rotinas no Banco de Dados" else "Routines in Database"
+                            stringResource(R.string.home_routines_title)
                         }
                         Text(
                             text = routineTitle,
@@ -654,7 +960,7 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp), tint = RedAccent)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (isPt) "+ Nova Rotina" else "+ New Routine", fontSize = 11.sp)
+                        Text(stringResource(R.string.home_new_routine_btn), fontSize = 11.sp)
                     }
                 }
 
@@ -673,11 +979,9 @@ fun HomeScreen(
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = RedAccent, modifier = Modifier.size(32.dp))
                             Spacer(modifier = Modifier.height(8.dp))
                             val emptyRoutineMsg = if (selectedLanguageFilter != null) {
-                                if (isPt) "Nenhuma rotina contendo ${selectedLanguageFilter!!.displayName} salva no banco."
-                                else "No routines containing ${selectedLanguageFilter!!.displayName} in the database."
+                                stringResource(R.string.home_routines_empty_tech, selectedLanguageFilter!!.displayName)
                             } else {
-                                if (isPt) "Nenhuma rotina salva ainda no banco de dados."
-                                else "No routines saved in the database yet."
+                                stringResource(R.string.home_routines_empty)
                             }
                             Text(
                                 text = emptyRoutineMsg,
@@ -691,10 +995,9 @@ fun HomeScreen(
                                 shape = RoundedCornerShape(20.dp)
                             ) {
                                 val buttonLabel = if (selectedLanguageFilter != null) {
-                                    if (isPt) "Criar Rotina de ${selectedLanguageFilter!!.displayName} com IA"
-                                    else "Create ${selectedLanguageFilter!!.displayName} Routine with AI"
+                                    stringResource(R.string.home_routines_create_ai_tech, selectedLanguageFilter!!.displayName)
                                 } else {
-                                    if (isPt) "Gerar Rotina com IA" else "Generate Routine with AI"
+                                    stringResource(R.string.home_routines_create_ai)
                                 }
                                 Text(buttonLabel)
                             }
@@ -710,6 +1013,19 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                     }
+                }
+            }
+        }
+
+        if (!isProSubscriber) {
+            item {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    ModerateInlineAdBanner(
+                        ad = ModerateAdCatalog.pickForSlot(0),
+                        language = language,
+                        isProSubscriber = isProSubscriber,
+                        onUpgradeProClick = onOpenProSubscription
+                    )
                 }
             }
         }
@@ -818,15 +1134,18 @@ fun DatabaseRoutineCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${routine.totalDays} " + (if (isPt) "dias" else "days") +
-                                " • ${routine.dailyCommitmentMinutes} min/" + (if (isPt) "dia" else "day"),
+                        text = stringResource(
+                            R.string.home_routine_duration,
+                            routine.totalDays,
+                            routine.dailyCommitmentMinutes
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Text(
-                    text = "$completedEvents de $totalEvents " + if (isPt) "sessões feitas" else "sessions done",
+                    text = stringResource(R.string.home_routine_sessions_done, completedEvents, totalEvents),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -847,7 +1166,7 @@ fun DatabaseRoutineCard(
                 ) {
                     Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (isPt) "Ver no Calendário" else "View in Calendar", fontSize = 11.sp)
+                    Text(stringResource(R.string.home_routine_calendar_btn), fontSize = 11.sp)
                 }
 
                 OutlinedButton(
@@ -857,7 +1176,7 @@ fun DatabaseRoutineCard(
                 ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp), tint = RedAccent)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (isPt) "Tirar Dúvidas com IA" else "Ask AI Tutor", fontSize = 11.sp)
+                    Text(stringResource(R.string.home_routine_ai_btn), fontSize = 11.sp)
                 }
             }
         }
@@ -878,8 +1197,7 @@ fun EmptyRoutineCard(isPt: Boolean, onGenerate: () -> Unit) {
             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = RedAccent, modifier = Modifier.size(32.dp))
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = if (isPt) "Nenhuma rotina salva ainda no banco de dados."
-                else "No routines saved in the database yet.",
+                text = stringResource(R.string.home_routines_empty),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -889,7 +1207,7 @@ fun EmptyRoutineCard(isPt: Boolean, onGenerate: () -> Unit) {
                 colors = ButtonDefaults.buttonColors(containerColor = RedAccent),
                 shape = RoundedCornerShape(20.dp)
             ) {
-                Text(if (isPt) "Gerar Rotina com IA" else "Generate Routine with AI")
+                Text(stringResource(R.string.home_routines_create_ai))
             }
         }
     }
@@ -1005,7 +1323,8 @@ fun HeroHeaderCard(
     isPt: Boolean,
     onOpenAi: () -> Unit,
     onStartInitialAssessment: () -> Unit = {},
-    onOpenLevelRoadmap: () -> Unit = {}
+    onOpenLevelRoadmap: () -> Unit = {},
+    onToggleLanguage: () -> Unit = {}
 ) {
     val rankLabel = if (isPt) scoreInfo.rankBadgePt else scoreInfo.rankBadgeEn
     val remainingXp = (scoreInfo.nextLevelTarget - scoreInfo.totalScore).coerceAtLeast(0)
@@ -1040,7 +1359,7 @@ fun HeroHeaderCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "DevRoutine AI 🚀",
+                                text = "${stringResource(R.string.app_name)} 🚀",
                                 color = Color(0xFFFFCCD5),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
@@ -1051,7 +1370,7 @@ fun HeroHeaderCard(
                                 color = Color(0xFF1E072E).copy(alpha = 0.85f)
                             ) {
                                 Text(
-                                    text = "Nvl ${scoreInfo.levelNumber}",
+                                    text = stringResource(R.string.home_level_short, scoreInfo.levelNumber),
                                     color = Color(0xFFFFD54F),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
@@ -1082,28 +1401,66 @@ fun HeroHeaderCard(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF1E072E).copy(alpha = 0.7f),
-                        border = CardDefaults.outlinedCardBorder().copy(width = 1.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFF1E072E).copy(alpha = 0.78f),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                Color(0xFFFFD54F).copy(alpha = 0.45f)
+                            ),
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onToggleLanguage() }
+                                .testTag("button_home_toggle_language")
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.LocalFireDepartment,
-                                contentDescription = "Ofensiva",
-                                tint = RedAccent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${streakInfo.streakDays} " + if (isPt) "dias" else "days",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Translate,
+                                    contentDescription = stringResource(R.string.action_toggle_language),
+                                    tint = Color(0xFFFFD54F),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = stringResource(if (isPt) R.string.lang_chip_pt else R.string.lang_chip_en),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E072E).copy(alpha = 0.7f),
+                            border = CardDefaults.outlinedCardBorder().copy(width = 1.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalFireDepartment,
+                                    contentDescription = stringResource(R.string.home_streak_cd),
+                                    tint = RedAccent,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.common_days_count, streakInfo.streakDays),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -1118,10 +1475,9 @@ fun HeroHeaderCard(
                 ) {
                     Text(
                         text = if (scoreInfo.isMaxLevel) {
-                            if (isPt) "Nível Máximo Alcançado!" else "Max Level Reached!"
+                            stringResource(R.string.home_max_level_reached)
                         } else {
-                            if (isPt) "Faltam $remainingXp XP para o Nvl ${scoreInfo.levelNumber + 1}"
-                            else "$remainingXp XP left for Lv ${scoreInfo.levelNumber + 1}"
+                            stringResource(R.string.home_xp_left_next_level, remainingXp, scoreInfo.levelNumber + 1)
                         },
                         color = Color(0xFFE2E0EC),
                         fontSize = 11.sp
@@ -1166,22 +1522,21 @@ fun HeroHeaderCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isPt) "❤️ Subir de nível restaura 25 vidas"
-                            else "❤️ Leveling up restores all 25 lives",
+                            text = stringResource(R.string.home_level_restores_lives),
                             fontSize = 11.sp,
                             color = Color(0xFFFFD6E0),
                             fontWeight = FontWeight.Medium
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isPt) "Ver Níveis" else "View Ranks",
+                                text = stringResource(R.string.home_view_ranks),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFFFD54F)
                             )
                             Icon(
                                 imageVector = Icons.Default.ChevronRight,
-                                contentDescription = if (isPt) "Ver sistema de níveis" else "View level roadmap",
+                                contentDescription = stringResource(R.string.home_view_ranks_cd),
                                 tint = Color(0xFFFFD54F),
                                 modifier = Modifier.size(16.dp)
                             )
@@ -1220,11 +1575,11 @@ fun HeroHeaderCard(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isPt) {
-                                    "Hoje: ${dailyStudyGoalState.formattedActiveTime} • Total: ${maxOf(screenTimeMinutes, dailyStudyGoalState.totalActiveMinutes)}m"
-                                } else {
-                                    "Today: ${dailyStudyGoalState.formattedActiveTime} • Total: ${maxOf(screenTimeMinutes, dailyStudyGoalState.totalActiveMinutes)}m"
-                                },
+                                text = stringResource(
+                                    R.string.home_today_total_timer,
+                                    dailyStudyGoalState.formattedActiveTime,
+                                    maxOf(screenTimeMinutes, dailyStudyGoalState.totalActiveMinutes)
+                                ),
                                 fontSize = 11.sp,
                                 color = timerColor,
                                 fontWeight = FontWeight.Bold
@@ -1247,11 +1602,9 @@ fun HeroHeaderCard(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isTimerRunning) {
-                                        if (isPt) "Ativo" else "Live"
-                                    } else {
-                                        if (isPt) "Em pausa" else "Idle"
-                                    },
+                                    text = stringResource(
+                                        if (isTimerRunning) R.string.home_timer_live else R.string.home_timer_idle
+                                    ),
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = timerColor
@@ -1290,14 +1643,13 @@ fun HeroHeaderCard(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = if (isPt) "🎯 Diagnóstico Inicial Dev (Opcional)" else "🎯 Initial Dev Diagnostic (Optional)",
+                                        text = stringResource(R.string.home_diagnostic_title),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         color = Color.White
                                     )
                                     Text(
-                                        text = if (isPt) "✨ Não é obrigatório • Toque aqui quando desejar definir seu nível e ganhar título + medalha!"
-                                        else "✨ Not mandatory • Tap anytime to calibrate your level and earn title + badge!",
+                                        text = stringResource(R.string.home_diagnostic_desc),
                                         fontSize = 10.sp,
                                         color = Color(0xFFE2E0EC)
                                     )
@@ -1320,15 +1672,15 @@ fun HeroHeaderCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     StatPill(
-                        label = if (isPt) "XP Acumulado" else "Total XP",
+                        label = stringResource(R.string.home_stat_total_xp),
                         value = "${scoreInfo.totalScore}"
                     )
                     StatPill(
-                        label = if (isPt) "Atividades Feitas" else "Activities Done",
+                        label = stringResource(R.string.home_stat_activities_done),
                         value = "${scoreInfo.completedActivitiesCount}"
                     )
                     StatPill(
-                        label = if (isPt) "Quizzes Acertados" else "Quizzes Solved",
+                        label = stringResource(R.string.home_stat_quizzes_solved),
                         value = "${scoreInfo.correctQuizCount}"
                     )
                 }
@@ -1522,12 +1874,11 @@ fun StudyLanguageFilterRow(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = if (isPt) "Filtrar por Linguagem" else "Filter by Language",
+                        text = stringResource(R.string.home_filter_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = if (isPt) "Foque nas rotinas das linguagens que deseja praticar hoje"
-                        else "Focus on routines for specific languages to practice today",
+                        text = stringResource(R.string.home_filter_subtitle),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1548,13 +1899,13 @@ fun StudyLanguageFilterRow(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Clear,
-                            contentDescription = "Limpar filtro",
+                            contentDescription = stringResource(R.string.common_clear),
                             tint = RedAccent,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isPt) "Limpar" else "Clear",
+                            text = stringResource(R.string.common_clear),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = RedAccent
@@ -1579,7 +1930,7 @@ fun StudyLanguageFilterRow(
                     onClick = { onSelectTech(null) },
                     label = {
                         Text(
-                            text = if (isPt) "Todas" else "All",
+                            text = stringResource(R.string.common_all),
                             fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal,
                             fontSize = 12.sp
                         )
@@ -1666,7 +2017,7 @@ fun StudyLanguageFilterRow(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = (if (isPt) "Exibindo rotinas de " else "Showing routines for ") + selectedTech.displayName,
+                            text = stringResource(R.string.home_filter_showing_for, selectedTech.displayName),
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -1677,8 +2028,7 @@ fun StudyLanguageFilterRow(
                         color = selectedTech.accentColor.copy(alpha = 0.2f)
                     ) {
                         Text(
-                            text = if (isPt) "$sessionsCount sessões • $routinesCount rotinas"
-                            else "$sessionsCount sessions • $routinesCount routines",
+                            text = stringResource(R.string.home_filter_counts, sessionsCount, routinesCount),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = selectedTech.accentColor,
@@ -1771,12 +2121,11 @@ fun DailyProgressDashboardOverviewCard(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (isPt) "Progresso Diário de Estudos" else "Daily Study Progress",
+                            text = stringResource(R.string.home_daily_progress_title),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = if (isPt) "Meta: $dailyGoalMinutes min • Calculada pelo cronômetro ativo"
-                            else "Goal: $dailyGoalMinutes min • Auto-calculated from active timer",
+                            text = stringResource(R.string.home_daily_progress_goal_sub, dailyGoalMinutes),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1790,7 +2139,11 @@ fun DailyProgressDashboardOverviewCard(
                     color = if (progressPercent >= 100) Color(0xFF4CAF50).copy(alpha = 0.2f) else PurplePrimary.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = if (progressPercent >= 100) (if (isPt) "🎉 Meta Atingida!" else "🎉 Goal Reached!") else "$progressPercent% " + if (isPt) "concluído" else "completed",
+                        text = if (progressPercent >= 100) {
+                            stringResource(R.string.home_daily_goal_reached)
+                        } else {
+                            stringResource(R.string.home_daily_goal_percent, progressPercent)
+                        },
                         color = if (progressPercent >= 100) Color(0xFF4CAF50) else PurplePrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
@@ -1826,11 +2179,10 @@ fun DailyProgressDashboardOverviewCard(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (dailyStudyGoalState.isTimerRunning) {
-                                    if (isPt) "Cronômetro de atividade em execução" else "Activity timer running live"
-                                } else {
-                                    if (isPt) "Pausado por inatividade (interaja para retomar)" else "Paused on inactivity (interact to resume)"
-                                },
+                                text = stringResource(
+                                    if (dailyStudyGoalState.isTimerRunning) R.string.home_daily_timer_running
+                                    else R.string.home_daily_timer_paused
+                                ),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = activeBadgeColor
@@ -1859,17 +2211,17 @@ fun DailyProgressDashboardOverviewCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = if (isPt) "$todayTotalMinutes de $dailyGoalMinutes min ativos" else "$todayTotalMinutes of $dailyGoalMinutes active min",
+                        text = stringResource(R.string.home_daily_minutes_ratio, todayTotalMinutes, dailyGoalMinutes),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = if (remainingSeconds <= 0) {
-                            if (isPt) "Excelente consistência! 🔥" else "Great consistency! 🔥"
+                            stringResource(R.string.home_daily_great_consistency)
                         } else {
                             val remMin = remainingSeconds / 60
                             val remSec = remainingSeconds % 60
-                            if (isPt) "Faltam ${remMin}m ${remSec}s hoje" else "${remMin}m ${remSec}s left today"
+                            stringResource(R.string.home_daily_remaining_today, remMin, remSec)
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
@@ -1887,29 +2239,28 @@ fun DailyProgressDashboardOverviewCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Timer,
                     iconTint = Color(0xFF2196F3),
-                    title = if (isPt) "Tempo Ativo" else "Active Time",
+                    title = stringResource(R.string.home_metric_active_time),
                     value = formattedActive,
-                    subtext = if (dailyStudyGoalState.isTimerRunning) {
-                        if (isPt) "ao vivo agora" else "live tracking"
-                    } else {
-                        if (isPt) "em pausa" else "paused"
-                    }
+                    subtext = stringResource(
+                        if (dailyStudyGoalState.isTimerRunning) R.string.home_metric_live
+                        else R.string.home_metric_paused
+                    )
                 )
                 StatMetricCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.CheckCircle,
                     iconTint = Color(0xFF4CAF50),
-                    title = if (isPt) "Atividades" else "Activities",
+                    title = stringResource(R.string.home_metric_activities),
                     value = "$todayTotalTasks",
-                    subtext = if (isPt) "desafios/quiz" else "challenges/quiz"
+                    subtext = stringResource(R.string.home_metric_challenges_quiz)
                 )
                 StatMetricCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Star,
                     iconTint = Color(0xFFFFB300),
-                    title = if (isPt) "XP Hoje" else "XP Today",
+                    title = stringResource(R.string.home_metric_xp_today),
                     value = "+$todayTotalXp",
-                    subtext = if (isPt) "pontos" else "points"
+                    subtext = stringResource(R.string.home_metric_points)
                 )
             }
 
@@ -1918,7 +2269,7 @@ fun DailyProgressDashboardOverviewCard(
             if (studiedTechs.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = if (isPt) "Linguagens praticadas hoje:" else "Practiced languages today:",
+                        text = stringResource(R.string.home_practiced_today),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1973,8 +2324,7 @@ fun DailyProgressDashboardOverviewCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isPt) "Meta contabilizada automaticamente pelo tempo de uso no app."
-                            else "Daily goal is tracked automatically from real app usage time.",
+                            text = stringResource(R.string.home_daily_auto_notice),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
@@ -1987,7 +2337,7 @@ fun DailyProgressDashboardOverviewCard(
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = PurplePrimary)
                         ) {
-                            Text(if (isPt) "Praticar" else "Practice", fontSize = 11.sp, color = Color.White)
+                            Text(stringResource(R.string.common_practice), fontSize = 11.sp, color = Color.White)
                         }
                     }
                 }
@@ -2011,8 +2361,7 @@ fun DailyProgressDashboardOverviewCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isPt) "✨ Resumo Semanal com IA (Feedback de 7 dias)"
-                    else "✨ AI Weekly Study Summary (7-Day Feedback)",
+                    text = stringResource(R.string.home_weekly_ai_summary_btn),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = PurplePrimary
@@ -2074,12 +2423,12 @@ fun AiStudySuggestionsSection(
     var selectedCategoryFilter by remember { mutableStateOf("ALL") }
 
     val filterOptions = listOf(
-        Pair("ALL", if (isPt) "Todos" else "All"),
+        Pair("ALL", stringResource(R.string.common_all)),
         Pair("JS_TS", "JavaScript / TS"),
         Pair("KOTLIN", "Kotlin"),
         Pair("GO", "Go"),
         Pair("PYTHON", "Python"),
-        Pair("DATA", if (isPt) "SQL & Bancos" else "SQL & DB"),
+        Pair("DATA", stringResource(R.string.home_ai_filter_sql_db)),
         Pair("FRONTEND", "Frontend"),
         Pair("JAVA", "Java")
     )
@@ -2132,12 +2481,14 @@ fun AiStudySuggestionsSection(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = if (isPt) "Tópicos Sugeridos pela IA" else "AI Study Suggestions",
+                        text = stringResource(R.string.home_ai_suggestions_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = if (isPt) "Recomendações para nível ${scoreInfo.levelTitlePt}"
-                        else "Recommended for ${scoreInfo.levelTitleEn}",
+                        text = stringResource(
+                            R.string.home_ai_suggestions_sub,
+                            if (isPt) scoreInfo.levelTitlePt else scoreInfo.levelTitleEn
+                        ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2363,7 +2714,7 @@ fun AiSuggestedTopicCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isPt) "Praticar com AI" else "Practice with AI",
+                        text = stringResource(R.string.home_practice_with_ai),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -2384,7 +2735,7 @@ fun AiSuggestedTopicCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (isPt) "Ver Desafios" else "Challenges",
+                        text = stringResource(R.string.home_view_challenges),
                         fontSize = 11.sp
                     )
                 }
@@ -2393,13 +2744,144 @@ fun AiSuggestedTopicCard(
     }
 }
 
+@Composable
+private fun TargetSubjectsHomeCard(
+    targetSubjectIds: List<String>,
+    language: Language,
+    onOpenTargetSubjects: () -> Unit,
+    onOpenTech: (Technology) -> Unit
+) {
+    val isPt = language == Language.PT
+    val chosenTechs = remember(targetSubjectIds) {
+        targetSubjectIds.mapNotNull { id -> Technology.entries.firstOrNull { it.id == id } }
+    }
+
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.horizontalGradient(listOf(PurplePrimary.copy(alpha = 0.65f), RedAccent.copy(alpha = 0.65f))),
+            width = 1.dp
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onOpenTargetSubjects() }
+            .testTag("card_home_target_subjects")
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(PurplePrimary, RedAccent))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TrackChanges,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.home_target_subjects_title),
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                        Text(
+                            text = if (chosenTechs.isEmpty()) {
+                                stringResource(R.string.home_target_subjects_empty)
+                            } else {
+                                stringResource(R.string.home_target_subjects_count, chosenTechs.size)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = PurplePrimary.copy(alpha = 0.16f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onOpenTargetSubjects() }
+                        .testTag("btn_home_edit_target_subjects")
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (chosenTechs.isEmpty()) R.string.home_target_select
+                            else R.string.home_target_edit
+                        ),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PurplePrimary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            if (chosenTechs.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(chosenTechs) { tech ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = tech.accentColor.copy(alpha = 0.14f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, tech.accentColor.copy(alpha = 0.45f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onOpenTech(tech) }
+                                .testTag("chip_home_target_${tech.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = tech.icon,
+                                    contentDescription = null,
+                                    tint = tech.accentColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = tech.displayName,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /**
- * Seção em Grade (Layout de Grade de 2 Colunas) para as 8 tecnologias suportadas:
- * Python, SQL, HTML, CSS, Java, MySQL, PostgreSQL, MongoDB.
+ * Seção em Grade (Layout de Grade de 2 Colunas) para as 12 tecnologias suportadas.
  */
 @Composable
 fun TechGridSection(
     allTechs: List<Technology>,
+    targetSubjectIds: List<String> = emptyList(),
     getTechScore: (Technology) -> Int,
     todayProgressMap: Map<String, LanguageDailyProgress>,
     language: Language,
@@ -2439,11 +2921,11 @@ fun TechGridSection(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = if (isPt) "Trilhas de Aprendizado (${allTechs.size})" else "Learning Tracks (${allTechs.size})",
+                        text = stringResource(R.string.home_learning_tracks_title, allTechs.size),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = if (isPt) "Grade de tecnologias suportadas" else "Supported technologies grid",
+                        text = stringResource(R.string.home_learning_tracks_sub),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2451,7 +2933,7 @@ fun TechGridSection(
             }
 
             Text(
-                text = if (isPt) "Ver todas" else "View all",
+                text = stringResource(R.string.home_learning_tracks_view_all),
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable { onNavigateToHub() }
@@ -2466,6 +2948,7 @@ fun TechGridSection(
             ) {
                 TechGridCard(
                     tech = pair[0],
+                    isTargetSubject = pair[0].id in targetSubjectIds,
                     score = getTechScore(pair[0]),
                     todayMinutes = todayProgressMap[pair[0].id]?.minutesStudied ?: 0,
                     language = language,
@@ -2476,6 +2959,7 @@ fun TechGridSection(
                 if (pair.size > 1) {
                     TechGridCard(
                         tech = pair[1],
+                        isTargetSubject = pair[1].id in targetSubjectIds,
                         score = getTechScore(pair[1]),
                         todayMinutes = todayProgressMap[pair[1].id]?.minutesStudied ?: 0,
                         language = language,
@@ -2497,6 +2981,7 @@ fun TechGridSection(
 @Composable
 fun TechGridCard(
     tech: Technology,
+    isTargetSubject: Boolean = false,
     score: Int,
     todayMinutes: Int,
     language: Language,
@@ -2524,16 +3009,20 @@ fun TechGridCard(
         ),
         border = CardDefaults.outlinedCardBorder().copy(
             brush = Brush.linearGradient(
-                listOf(tech.accentColor.copy(alpha = 0.5f), tech.accentColor.copy(alpha = 0.15f))
+                if (isTargetSubject) {
+                    listOf(tech.accentColor, PurplePrimary.copy(alpha = 0.7f))
+                } else {
+                    listOf(tech.accentColor.copy(alpha = 0.5f), tech.accentColor.copy(alpha = 0.15f))
+                }
             ),
-            width = 1.dp
+            width = if (isTargetSubject) 1.5.dp else 1.dp
         )
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Header with tech icon and today minutes pill
+            // Header with tech icon and today minutes / target focus pill
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -2560,10 +3049,23 @@ fun TechGridCard(
                         color = Color(0xFF2196F3).copy(alpha = 0.2f)
                     ) {
                         Text(
-                            text = "${todayMinutes}m " + if (isPt) "hoje" else "today",
+                            text = "${todayMinutes}m " + stringResource(R.string.common_today),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2196F3),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else if (isTargetSubject) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = PurplePrimary.copy(alpha = 0.18f)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.common_target_badge),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PurplePrimary,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }

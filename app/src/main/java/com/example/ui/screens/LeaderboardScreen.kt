@@ -169,6 +169,7 @@ fun LeaderboardScreen(
                 leaderboardEntries = leaderboardEntries,
                 isPt = isPt,
                 onLogin = onOpenAuthDialog,
+                onOpenProfile = onOpenAuthDialog,
                 onSync = onSyncLeaderboard
             )
         }
@@ -370,6 +371,7 @@ fun CurrentUserRankingCard(
     leaderboardEntries: List<LeaderboardEntry>,
     isPt: Boolean,
     onLogin: () -> Unit,
+    onOpenProfile: () -> Unit = onLogin,
     onSync: () -> Unit
 ) {
     val isLoggedIn = user != null && user.isLoggedIn
@@ -387,7 +389,10 @@ fun CurrentUserRankingCard(
             else androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.outlineVariant),
             width = if (isLoggedIn) 1.5.dp else 1.dp
         ),
-        modifier = Modifier.fillMaxWidth().testTag("card_user_ranking_status")
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isLoggedIn) Modifier.clickable { onOpenProfile() } else Modifier)
+            .testTag("card_user_ranking_status")
     ) {
         Row(
             modifier = Modifier
@@ -434,7 +439,7 @@ fun CurrentUserRankingCard(
 
                         val rankText = userEntry?.let { "#${it.rank} no Placar" } ?: (if (isPt) "Registrado" else "Registered")
                         Text(
-                            text = "$rankText • ${user.totalScore} XP (${user.levelTitlePt})",
+                            text = "$rankText • ${user.totalScore} XP • 🏆 ${user.badgesCount}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -582,8 +587,26 @@ fun LeaderboardEntryRow(
                 }
             }
 
-            // Right side: Streaks, Badges, XP
+            // Right side: Badges, Streaks, XP
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (entry.badgesCount > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.MilitaryTech,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD54F),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "${entry.badgesCount}",
+                            fontSize = 11.sp,
+                            color = Color(0xFFFFD54F),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
                 if (entry.streakDays > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.LocalFireDepartment, contentDescription = null, tint = RedAccent, modifier = Modifier.size(14.dp))

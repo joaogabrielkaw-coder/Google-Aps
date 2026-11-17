@@ -649,6 +649,983 @@ class ExampleUnitTest {
     assertTrue(com.example.ui.DailyLivesManager.consumeOneLife(prefs, today).first)
   }
 
+  @Test
+  fun achievementsSystem_unlocksPythonBeginnerAndTenHoursOfSqlAndFormatsHours() = kotlinx.coroutines.test.runTest {
+    val fakeDao = InMemoryUserBadgeDao()
+    val repo = com.example.data.repository.UserBadgeRepository(fakeDao)
+    repo.initializeBadgesIfEmpty()
+
+    val emptyScore = com.example.model.UserScoreInfo()
+
+    // Partial progress: 20 Python XP & 135 SQL minutes (2h 15m across SQL/MySQL/Postgres)
+    val partialUnlocked = repo.evaluateAndSyncBadges(
+      streakDays = 0,
+      completedSessions = emptyList(),
+      scoreInfo = emptyScore,
+      techScores = mapOf(Technology.PYTHON to 20),
+      hasAiRoutine = false,
+      techMinutes = mapOf(
+        Technology.SQL to 60,
+        Technology.MYSQL to 45,
+        Technology.POSTGRESQL to 30
+      )
+    )
+    assertFalse(fakeDao.getBadgeById("badge_python_beginner")?.isUnlocked ?: true)
+    assertEquals(20, fakeDao.getBadgeById("badge_python_beginner")?.currentProgress)
+
+    val sql1h = fakeDao.getBadgeById("badge_sql_hours_1")!!
+    val sql10h = fakeDao.getBadgeById("badge_sql_hours_10")!!
+    assertTrue(sql1h.isUnlocked)
+    assertTrue(partialUnlocked.any { it.id == "badge_sql_hours_1" })
+    assertFalse(sql10h.isUnlocked)
+    assertEquals(135, sql10h.currentProgress)
+    assertEquals("2h 15m / 10h", com.example.ui.components.formatBadgeProgressText(sql10h, com.example.model.Language.EN))
+    assertEquals("45m", com.example.ui.components.formatMinutesAsHoursText(45))
+
+    // Reach 30 Python XP and 600 combined SQL minutes -> Python Beginner & 10 Hours of SQL unlock
+    val unlockedNow = repo.evaluateAndSyncBadges(
+      streakDays = 0,
+      completedSessions = emptyList(),
+      scoreInfo = emptyScore,
+      techScores = mapOf(Technology.PYTHON to 30),
+      hasAiRoutine = false,
+      techMinutes = mapOf(
+        Technology.SQL to 300,
+        Technology.MYSQL to 200,
+        Technology.POSTGRESQL to 100
+      )
+    )
+    val newlyIds = unlockedNow.map { it.id }.toSet()
+    assertTrue(newlyIds.contains("badge_python_beginner"))
+    assertTrue(newlyIds.contains("badge_sql_hours_10"))
+    assertTrue(fakeDao.getBadgeById("badge_python_beginner")?.isUnlocked == true)
+    assertTrue(fakeDao.getBadgeById("badge_sql_hours_10")?.isUnlocked == true)
+    assertEquals(600, fakeDao.getBadgeById("badge_sql_hours_10")?.currentProgress)
+    assertTrue(repo.getUnlockedBadgeIds().containsAll(listOf("badge_python_beginner", "badge_sql_hours_1", "badge_sql_hours_10")))
+
+    // Restore cloud badges into a fresh repository
+    val freshDao = InMemoryUserBadgeDao()
+    val freshRepo = com.example.data.repository.UserBadgeRepository(freshDao)
+    freshRepo.restoreUnlockedBadgeIdsFromCloud(setOf("badge_sql_hours_10", "badge_python_beginner"))
+    assertTrue(freshDao.getBadgeById("badge_sql_hours_10")?.isUnlocked == true)
+    assertTrue(freshDao.getBadgeById("badge_python_beginner")?.isUnlocked == true)
+    assertFalse(freshDao.getBadgeById("badge_kotlin_hours_5")?.isUnlocked ?: true)
+  }
+
+  @Test
+  fun chatModels_andMediaCodec_workDeterministically() {
+    // Deterministic conversation IDs & sorted participants
+    val idAb = com.example.model.ChatIdUtil.deterministicPairId("user_alpha", "user_beta")
+    val idBa = com.example.model.ChatIdUtil.deterministicPairId("user_beta", "user_alpha")
+    assertEquals(idAb, idBa)
+    assertEquals(listOf("user_alpha", "user_beta"), com.example.model.ChatIdUtil.sortedParticipantIds("user_beta", "user_alpha"))
+
+    // ChatRequestItem peer helpers
+    val req = com.example.model.ChatRequestItem(
+      requestId = idAb,
+      chatId = idAb,
+      senderId = "user_alpha",
+      senderName = "Alice",
+      senderPhotoUrl = "https://example.com/a.jpg",
+      recipientId = "user_beta",
+      recipientName = "Bob",
+      recipientPhotoUrl = "https://example.com/b.jpg",
+      status = com.example.model.ChatRequestStatus.PENDING
+    )
+    assertFalse(req.isIncomingFor("user_alpha"))
+    assertTrue(req.isIncomingFor("user_beta"))
+    assertEquals("user_beta", req.peerIdFor("user_alpha"))
+    assertEquals("Bob", req.peerNameFor("user_alpha"))
+    assertEquals("https://example.com/a.jpg", req.peerPhotoFor("user_beta"))
+
+    // ActiveCallSession peer resolution
+    val call = com.example.model.ActiveCallSession(
+      callId = "call_1",
+      chatId = idAb,
+      callerId = "user_alpha",
+      callerName = "Alice",
+      calleeId = "user_beta",
+      calleeName = "Bob",
+      callType = com.example.model.ChatCallType.VIDEO,
+      status = com.example.model.ChatCallStatus.RINGING
+    )
+    assertEquals("user_beta", call.peerId("user_alpha"))
+    assertEquals("Bob", call.peerName("user_alpha"))
+    assertEquals("user_alpha", call.peerId("user_beta"))
+    assertEquals("Alice", call.peerName("user_beta"))
+
+    // ChatMediaCodec Base64 chunk splitting & byte formatting
+    assertTrue(com.example.util.ChatMediaCodec.splitBase64IntoChunks("", 100).isEmpty())
+    val payload = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    val chunks = com.example.util.ChatMediaCodec.splitBase64IntoChunks(payload, chunkSize = 10)
+    assertEquals(4, chunks.size)
+    assertEquals(payload, chunks.joinToString(""))
+
+    assertEquals("512 B", com.example.util.ChatMediaCodec.formatByteSize(512L))
+    assertEquals("4 KB", com.example.util.ChatMediaCodec.formatByteSize(4096L))
+    assertTrue(com.example.util.ChatMediaCodec.formatByteSize(2_097_152L).contains("2"))
+  }
+
+  @Test
+  fun liveStudyRoomModels_parseModesStatusesAndParticipantsCorrectly() {
+    assertEquals(com.example.model.LiveRoomMode.AUDIO, com.example.model.LiveRoomMode.fromRaw("audio"))
+    assertEquals(com.example.model.LiveRoomMode.VIDEO, com.example.model.LiveRoomMode.fromRaw("VIDEO"))
+    assertEquals(com.example.model.LiveRoomMode.VIDEO, com.example.model.LiveRoomMode.fromRaw("unknown"))
+
+    assertEquals(com.example.model.LiveRoomStatus.LIVE, com.example.model.LiveRoomStatus.fromRaw("live"))
+    assertEquals(com.example.model.LiveRoomStatus.ENDED, com.example.model.LiveRoomStatus.fromRaw("ended"))
+    assertEquals(com.example.model.LiveRoomStatus.ENDED, com.example.model.LiveRoomStatus.fromRaw("invalid"))
+
+    assertEquals(com.example.model.LiveMessageType.HAND_RAISE, com.example.model.LiveMessageType.fromRaw("hand_raise"))
+    assertEquals(com.example.model.LiveMessageType.SYSTEM, com.example.model.LiveMessageType.fromRaw("system"))
+    assertEquals(com.example.model.LiveMessageType.TEXT, com.example.model.LiveMessageType.fromRaw("other"))
+
+    val room = com.example.model.LiveStudyRoom(
+      roomId = "live_sql_01",
+      title = "SQL JOINs na Prática",
+      topicTechId = "sql",
+      topicLabel = "SQL",
+      hostId = "host_1",
+      hostName = "Maria",
+      participantIds = listOf("host_1", "user_2", "user_3"),
+      participantNames = mapOf("host_1" to "Maria", "user_2" to "João", "user_3" to "Ana")
+    )
+    assertEquals(3, room.participantCount)
+    assertEquals(com.example.model.LiveRoomMode.VIDEO, room.liveMode)
+    assertEquals(com.example.model.LiveRoomStatus.LIVE, room.status)
+
+    val liveMsg = com.example.model.LiveRoomMessage(
+      messageId = "msg_1",
+      roomId = room.roomId,
+      senderId = "user_2",
+      senderName = "João",
+      text = "Qual a diferença entre LEFT JOIN e INNER JOIN?"
+    )
+    assertEquals(com.example.model.LiveMessageType.TEXT, liveMsg.messageType)
+  }
+
+  @Test
+  fun directorySearchHelper_listsAllUsersAndRanksMatchesByTypedOrder() {
+    val users = listOf(
+      com.example.model.ChatDirectoryUser(userId = "self", displayName = "Self", displayNameLower = "self", levelNumber = 5, totalScore = 1000),
+      com.example.model.ChatDirectoryUser(userId = "u1", displayName = "Pedro João", displayNameLower = "pedro joao", levelNumber = 3, levelTitle = "Dev Jr", totalScore = 500),
+      com.example.model.ChatDirectoryUser(userId = "u2", displayName = "João Silva", displayNameLower = "joao silva", levelNumber = 6, levelTitle = "Tech Lead", totalScore = 3000),
+      com.example.model.ChatDirectoryUser(userId = "u3", displayName = "Ana Carolina", displayNameLower = "ana carolina", levelNumber = 8, levelTitle = "Arquiteta", totalScore = 5000),
+      com.example.model.ChatDirectoryUser(userId = "u4", displayName = "João", displayNameLower = "joao", levelNumber = 2, levelTitle = "Iniciante", totalScore = 200),
+      com.example.model.ChatDirectoryUser(userId = "u5", displayName = "Mariana Joana", displayNameLower = "mariana joana", levelNumber = 4, levelTitle = "Pleno", totalScore = 1200)
+    )
+
+    // Blank query lists all other users alphabetically (excluding self)
+    val allAlpha = com.example.model.ChatDirectorySearchHelper.filterAndSortUsers(
+      users = users,
+      query = "",
+      currentUserId = "self",
+      sortMode = com.example.model.DirectorySortMode.ALPHABETICAL
+    )
+    assertEquals(listOf("Ana Carolina", "João", "João Silva", "Mariana Joana", "Pedro João"), allAlpha.map { it.displayName })
+
+    // Typing "joao" (accent-insensitive) orders: exact ("João") -> starts with ("João Silva") -> word prefix ("Pedro João")
+    val rankedJoao = com.example.model.ChatDirectorySearchHelper.filterAndSortUsers(
+      users = users,
+      query = "joao",
+      currentUserId = "self"
+    )
+    assertEquals(listOf("João", "João Silva", "Pedro João"), rankedJoao.map { it.displayName })
+
+    // Typing "joa" matches both "João..." and "Mariana Joana", ranked by starts-with then word-prefix alphabetically
+    val rankedJoa = com.example.model.ChatDirectorySearchHelper.filterAndSortUsers(
+      users = users,
+      query = "joa",
+      currentUserId = "self"
+    )
+    assertEquals(listOf("João", "João Silva", "Mariana Joana", "Pedro João"), rankedJoa.map { it.displayName })
+
+    // Filter CONNECTED vs AVAILABLE
+    val connectedOnly = com.example.model.ChatDirectorySearchHelper.filterAndSortUsers(
+      users = users,
+      query = "",
+      currentUserId = "self",
+      connectedUserIds = setOf("u2"),
+      filterMode = com.example.model.DirectoryFilterMode.CONNECTED
+    )
+    assertEquals(listOf("João Silva"), connectedOnly.map { it.displayName })
+
+    // Match range highlights accented substring cleanly
+    val range = com.example.model.ChatDirectorySearchHelper.findMatchRange("João Silva", "joao")
+    assertEquals(0..3, range)
+  }
+
+  @Test
+  fun techCourseModulesRepository_providesVerifiedFreeVideosAndModulesForAll12Courses() {
+    val allTechs = Technology.entries
+    assertEquals(12, allTechs.size)
+
+    val globalLessonIds = mutableSetOf<String>()
+
+    allTechs.forEach { tech ->
+      val curriculum = com.example.data.repository.TechCourseModulesRepository.getCurriculum(tech)
+      assertEquals(tech, curriculum.tech)
+      assertTrue("Modules missing for ${tech.id}", curriculum.modules.size >= 2)
+      assertTrue("Free references missing for ${tech.id}", curriculum.references.size >= 3)
+
+      val hasYouTubeRef = curriculum.references.any {
+        (it.type == com.example.model.CourseResourceType.YOUTUBE_PLAYLIST ||
+          it.type == com.example.model.CourseResourceType.YOUTUBE_VIDEO) &&
+          it.url.startsWith("https://www.youtube.com/")
+      }
+      assertTrue("YouTube course reference missing for ${tech.id}", hasYouTubeRef)
+
+      curriculum.references.forEach { ref ->
+        assertTrue("Invalid URL in ${ref.id}", ref.url.startsWith("https://"))
+        assertTrue(ref.titlePt.isNotBlank())
+        assertTrue(ref.titleEn.isNotBlank())
+        assertTrue(ref.provider.isNotBlank())
+      }
+
+      curriculum.modules.forEach { mod ->
+        assertTrue("Module ${mod.id} should have >= 2 lessons", mod.lessons.size >= 2)
+        assertTrue("Invalid module video URL in ${mod.id}", mod.primaryVideoUrl.startsWith("https://"))
+        mod.lessons.forEach { lesson ->
+          assertTrue("Duplicate lesson id ${lesson.id}", globalLessonIds.add(lesson.id))
+          assertTrue(lesson.durationMinutes > 0)
+          assertTrue(lesson.videoRefUrl.startsWith("https://"))
+          assertTrue(lesson.topicsPt.isNotEmpty())
+          assertTrue(lesson.topicsEn.isNotEmpty())
+        }
+      }
+    }
+
+    // Verify course progress helper accurately calculates completion percentage & minutes
+    val pythonLessons = com.example.data.repository.TechCourseModulesRepository.getAllLessonIds(Technology.PYTHON)
+    val initialProgress = com.example.data.repository.TechCourseModulesRepository.getCourseProgress(
+      Technology.PYTHON,
+      emptySet()
+    )
+    assertEquals(0, initialProgress.completedLessons)
+    assertEquals(0, initialProgress.progressPercent)
+    assertEquals(pythonLessons.size, initialProgress.totalLessons)
+
+    val firstTwo = pythonLessons.take(2).toSet()
+    val partialProgress = com.example.data.repository.TechCourseModulesRepository.getCourseProgress(
+      Technology.PYTHON,
+      firstTwo
+    )
+    assertEquals(2, partialProgress.completedLessons)
+    assertTrue(partialProgress.completedMinutes > 0)
+    assertTrue(partialProgress.progressPercent in 1..99)
+
+    val fullProgress = com.example.data.repository.TechCourseModulesRepository.getCourseProgress(
+      Technology.PYTHON,
+      pythonLessons
+    )
+    assertEquals(100, fullProgress.progressPercent)
+    assertEquals(0, fullProgress.remainingLessons)
+
+    // Verify Curso em Vídeo portal link is included across all courses
+    allTechs.forEach { tech ->
+      val refs = com.example.data.repository.TechCourseModulesRepository.getReferences(tech)
+      assertTrue(
+        "Curso em Vídeo portal missing for ${tech.id}",
+        refs.any { it.url == "https://www.cursoemvideo.com/cursos/" }
+      )
+    }
+  }
+
+  @Test
+  fun courseChecklistManager_persistsCompletionWithoutAwardingAnyXpPoints() {
+    val prefs = InMemorySharedPreferences()
+    assertTrue(com.example.ui.CourseChecklistManager.loadCompletedIds(prefs).isEmpty())
+
+    val afterCheck = com.example.ui.CourseChecklistManager.toggleLessonCompleted(
+      prefs = prefs,
+      currentLessons = emptySet(),
+      lessonId = "py_m1_l1"
+    )
+    assertEquals(setOf("py_m1_l1"), afterCheck)
+    assertEquals(setOf("py_m1_l1"), com.example.ui.CourseChecklistManager.loadCompletedIds(prefs))
+
+    // Marking video course lessons must NEVER award XP or touch score prefs
+    assertEquals(0, prefs.getInt("user_total_score", 0))
+    assertEquals(0, prefs.getInt("score_tech_python", 0))
+
+    val afterUncheck = com.example.ui.CourseChecklistManager.toggleLessonCompleted(
+      prefs = prefs,
+      currentLessons = afterCheck,
+      lessonId = "py_m1_l1"
+    )
+    assertTrue(afterUncheck.isEmpty())
+    assertEquals(0, prefs.getInt("user_total_score", 0))
+  }
+
+  @Test
+  fun targetSubjectsCatalog_andPreferenceSerialization_validateNormalizeAndMapPayloads() {
+    // Normalization removes duplicates, normalizes case, filters unknown IDs, preserves catalog order
+    val normalized = com.example.model.TargetSubjectsCatalog.normalizeSubjectIds(
+      listOf(" SQL ", "python", "PYTHON", "cobol", "html", "invalid_lang")
+    )
+    assertEquals(listOf("python", "sql", "html"), normalized)
+
+    // Bounds enforcement for daily goal & note length
+    assertEquals(10, com.example.model.TargetSubjectsCatalog.normalizeDailyGoalMinutes(2))
+    assertEquals(240, com.example.model.TargetSubjectsCatalog.normalizeDailyGoalMinutes(500))
+    assertEquals(45, com.example.model.TargetSubjectsCatalog.normalizeDailyGoalMinutes(45))
+
+    val longNote = "x".repeat(250)
+    assertEquals(200, com.example.model.TargetSubjectsCatalog.normalizeGoalNote("  $longNote  ").length)
+
+    // Preset track inference
+    assertEquals(
+      com.example.model.LearningTrackOption.BACKEND_DATA,
+      com.example.model.TargetSubjectsCatalog.inferMatchingTrack(listOf("sql", "python", "go", "postgresql"))
+    )
+    assertEquals(
+      com.example.model.LearningTrackOption.CUSTOM,
+      com.example.model.TargetSubjectsCatalog.inferMatchingTrack(listOf("python", "html"))
+    )
+
+    // Create map payload: never includes @DocumentId ("id"), includes userId & timestamps, omits blank note
+    val createPref = com.example.model.TargetSubjectsPreference(
+      id = "target_subjects",
+      userId = "ignored_uid",
+      subjectIds = listOf("HTML", "python", "sql", "cobol"),
+      dailyGoalMinutes = 5,
+      learningTrack = "balanced",
+      studyGoalNote = "   "
+    )
+    val createMap = createPref.toCreateMap("owner_uid_123")
+    assertFalse(createMap.containsKey("id"))
+    assertFalse(createMap.containsKey("studyGoalNote"))
+    assertEquals("owner_uid_123", createMap["userId"])
+    assertEquals(listOf("python", "sql", "html"), createMap["subjectIds"])
+    assertEquals(10, createMap["dailyGoalMinutes"])
+    assertEquals("balanced", createMap["learningTrack"])
+    assertTrue(createMap.containsKey("createdAt"))
+    assertTrue(createMap.containsKey("updatedAt"))
+
+    // Update map payload: omits immutable userId & createdAt and @DocumentId id
+    val updatePref = createPref.copy(studyGoalNote = "Focus on backend APIs")
+    val updateMap = updatePref.toUpdateMap()
+    assertFalse(updateMap.containsKey("id"))
+    assertFalse(updateMap.containsKey("userId"))
+    assertFalse(updateMap.containsKey("createdAt"))
+    assertEquals("Focus on backend APIs", updateMap["studyGoalNote"])
+    assertTrue(updateMap.containsKey("updatedAt"))
+  }
+
+  @Test
+  fun lifeShopCatalog_validatesDepletedQuotaAndCurrencyBalances() {
+    assertEquals(4, com.example.model.LifeShopCatalog.packages.size)
+    val quickPack = com.example.model.LifeShopCatalog.packages.first { it.id == "lives_quick_5" }
+    val studyPack = com.example.model.LifeShopCatalog.packages.first { it.id == "lives_study_12" }
+    val fullPack = com.example.model.LifeShopCatalog.packages.first { it.id == "lives_full_25" }
+    val crystalPack = com.example.model.LifeShopCatalog.packages.first {
+      it.currency == com.example.model.LifePurchaseCurrency.CRYSTALS
+    }
+
+    // Verify harder XP costs and minimum 50 diamonds requirement
+    assertEquals(150, quickPack.costAmount)
+    assertEquals(350, studyPack.costAmount)
+    assertEquals(650, fullPack.costAmount)
+    assertEquals(50, crystalPack.costAmount)
+
+    // Rejects purchase if user still has daily lives left
+    val quotaRejection = com.example.model.LifeShopCatalog.evaluatePurchaseEligibility(
+      remainingLives = 3,
+      pkg = quickPack,
+      availableXp = 1000,
+      availableCrystals = 100
+    )
+    assertTrue(quotaRejection is com.example.model.LifePurchaseResult.QuotaStillAvailable)
+    assertEquals(3, (quotaRejection as com.example.model.LifePurchaseResult.QuotaStillAvailable).remainingLives)
+
+    // Rejects XP pack when spendable XP is below harder threshold (150 XP)
+    val xpShort = com.example.model.LifeShopCatalog.evaluatePurchaseEligibility(
+      remainingLives = 0,
+      pkg = quickPack,
+      availableXp = 149,
+      availableCrystals = 10
+    )
+    assertTrue(xpShort is com.example.model.LifePurchaseResult.InsufficientFunds)
+    val xpShortResult = xpShort as com.example.model.LifePurchaseResult.InsufficientFunds
+    assertEquals(150, xpShortResult.required)
+    assertEquals(149, xpShortResult.available)
+    assertEquals(com.example.model.LifePurchaseCurrency.XP, xpShortResult.currency)
+
+    // Rejects Diamond pack when 3D game diamonds are below minimum 50
+    val crystalShort = com.example.model.LifeShopCatalog.evaluatePurchaseEligibility(
+      remainingLives = 0,
+      pkg = crystalPack,
+      availableXp = 500,
+      availableCrystals = 49
+    )
+    assertTrue(crystalShort is com.example.model.LifePurchaseResult.InsufficientFunds)
+    val crystalShortResult = crystalShort as com.example.model.LifePurchaseResult.InsufficientFunds
+    assertEquals(50, crystalShortResult.required)
+    assertEquals(49, crystalShortResult.available)
+    assertEquals(com.example.model.LifePurchaseCurrency.CRYSTALS, crystalShortResult.currency)
+
+    // Eligible when remainingLives == 0 and funds meet harder thresholds (150 XP / 50 diamonds)
+    assertNull(
+      com.example.model.LifeShopCatalog.evaluatePurchaseEligibility(
+        remainingLives = 0,
+        pkg = quickPack,
+        availableXp = 150,
+        availableCrystals = 0
+      )
+    )
+    assertNull(
+      com.example.model.LifeShopCatalog.evaluatePurchaseEligibility(
+        remainingLives = 0,
+        pkg = crystalPack,
+        availableXp = 0,
+        availableCrystals = 50
+      )
+    )
+  }
+
+  @Test
+  fun lifeShopCatalog_providesBrlExtraLifePackages_requiringRealBilling() {
+    val brl = com.example.model.LifeShopCatalog.brlPackages
+    assertEquals(3, brl.size)
+
+    val p10 = brl.first { it.livesAmount == 10 }
+    val p20 = brl.first { it.livesAmount == 20 }
+    val p50 = brl.first { it.livesAmount == 50 }
+
+    assertEquals(5, p10.costAmount)
+    assertEquals("R$ 5,00", p10.formattedPrice(com.example.model.Language.PT))
+    assertEquals("lives_brl_10", p10.playProductId)
+    assertEquals(10, p20.costAmount)
+    assertEquals("R$ 10,00", p20.formattedPrice(com.example.model.Language.PT))
+    assertEquals("lives_brl_20", p20.playProductId)
+    assertEquals(35, p50.costAmount)
+    assertEquals("R$ 35,00", p50.formattedPrice(com.example.model.Language.PT))
+    assertEquals("lives_brl_50", p50.playProductId)
+
+    // Live Play Store price overrides fallback label when fetched
+    val livePrices = mapOf("lives_brl_10" to "R$ 5,90")
+    assertEquals("R$ 5,90", p10.formattedPrice(com.example.model.Language.PT, livePrices))
+
+    // BRL extra life packages ALWAYS require real Google Play Billing regardless of daily lives
+    brl.forEach { pkg ->
+      assertEquals(com.example.model.LifePurchaseCurrency.BRL, pkg.currency)
+      val res = com.example.model.LifeShopCatalog.evaluatePurchaseEligibility(
+        remainingLives = 25,
+        pkg = pkg,
+        availableXp = 0,
+        availableCrystals = 0
+      )
+      assertTrue(res is com.example.model.LifePurchaseResult.RequiresRealBilling)
+    }
+  }
+
+  @Test
+  fun playBillingTokenRegistry_preventsDuplicateCreditingForSamePurchaseToken() {
+    val prefs = InMemorySharedPreferences()
+    val token = "gp_token_abc_123"
+    assertFalse(com.example.billing.PlayBillingTokenRegistry.hasProcessedToken(prefs, token))
+    com.example.billing.PlayBillingTokenRegistry.markTokenProcessed(prefs, token)
+    assertTrue(com.example.billing.PlayBillingTokenRegistry.hasProcessedToken(prefs, token))
+    assertFalse(com.example.billing.PlayBillingTokenRegistry.hasProcessedToken(prefs, "other_token"))
+  }
+
+  @Test
+  fun dailyLivesManager_addsPurchasedLives_persists_capsAt999_andHandlesNewDayReset() {
+    val prefs = InMemorySharedPreferences()
+    val day1 = "2026-11-16"
+    val day2 = "2026-11-17"
+    val day3 = "2026-11-18"
+
+    com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day1)
+    repeat(25) {
+      assertTrue(com.example.ui.DailyLivesManager.consumeOneLife(prefs, day1).first)
+    }
+    assertEquals(0, com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day1).remaining)
+
+    // Purchase +10 lives when depleted -> 10 lives, then consume 1 -> 9 lives
+    val afterFirstBuy = com.example.ui.DailyLivesManager.addPurchasedLives(prefs, 10, day1)
+    assertEquals(10, afterFirstBuy.remaining)
+    assertTrue(com.example.ui.DailyLivesManager.consumeOneLife(prefs, day1).first)
+    assertEquals(9, com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day1).remaining)
+
+    // Since remaining (9) < 25, a new day resets back to 25 daily lives
+    val nextDay = com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day2)
+    assertEquals(com.example.ui.DailyLivesInfo.MAX_DAILY_LIVES, nextDay.remaining)
+
+    // Buying +50 extra lives while at 25/25 gives 75 lives and preserves >25 on day3
+    val afterMegaPack = com.example.ui.DailyLivesManager.addPurchasedLives(prefs, 50, day2)
+    assertEquals(75, afterMegaPack.remaining)
+    assertEquals(75, com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day3).remaining)
+
+    // Capped at MAX_PURCHASED_LIVES_CAP (999)
+    val capped = com.example.ui.DailyLivesManager.addPurchasedLives(prefs, 1500, day3)
+    assertEquals(com.example.ui.DailyLivesInfo.MAX_PURCHASED_LIVES_CAP, capped.remaining)
+  }
+
+  @Test
+  fun proSubscriptionManager_activatesVerifiedPlayPlan_grants15BonusDailyLives_removesAds_andDeactivatesCleanly() {
+    val prefs = InMemorySharedPreferences()
+    val day1 = "2026-11-16"
+    val day2 = "2026-11-17"
+    val now = 1_700_000_000_000L
+
+    // Initially inactive -> 25 daily lives
+    val initialSub = com.example.ui.ProSubscriptionManager.loadState(prefs, now)
+    assertFalse(initialSub.isCurrentlyActive(now))
+    assertEquals(25, com.example.ui.DailyLivesInfo.effectiveDailyMax(false))
+    val freeLives = com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day1, 25)
+    assertEquals(25, freeLives.remaining)
+    assertEquals(25, freeLives.maxDaily)
+
+    // Activate verified DevRoutine Pro from Google Play (R$ 13/mês, +15 vidas/dia)
+    val activeSub = com.example.ui.ProSubscriptionManager.activateVerifiedPlaySubscription(
+      prefs = prefs,
+      purchaseToken = "play_sub_token_xyz",
+      orderId = "GPA.1234-5678",
+      purchaseTimeMillis = now,
+      isAutoRenewing = true,
+      nowMillis = now
+    )
+    assertTrue(activeSub.isCurrentlyActive(now))
+    assertTrue(activeSub.verifiedByPlayBilling)
+    assertEquals("GPA.1234-5678", activeSub.orderId)
+    assertEquals(13, activeSub.monthlyPriceBrl)
+    assertEquals(15, activeSub.bonusDailyLives)
+    assertEquals(30, activeSub.remainingDays(now))
+    assertEquals(40, com.example.ui.DailyLivesInfo.effectiveDailyMax(true))
+
+    // Immediate +15 lives grant raises 25 -> 40 and maxDaily -> 40 (only once per day!)
+    assertTrue(com.example.ui.ProSubscriptionManager.shouldGrantImmediateBonus(prefs, day1))
+    com.example.ui.ProSubscriptionManager.markImmediateBonusGranted(prefs, day1)
+    assertFalse(com.example.ui.ProSubscriptionManager.shouldGrantImmediateBonus(prefs, day1))
+    assertTrue(com.example.ui.ProSubscriptionManager.shouldGrantImmediateBonus(prefs, day2))
+    val boosted = com.example.ui.DailyLivesManager.grantSubscriptionBonusLives(prefs, 15, day1)
+    assertEquals(40, boosted.remaining)
+    assertEquals(40, boosted.maxDaily)
+
+    // Consume all 40 lives on day1, then verify new day resets to 40 (25 + 15) for Pro
+    repeat(40) {
+      assertTrue(com.example.ui.DailyLivesManager.consumeOneLife(prefs, day1, 40).first)
+    }
+    assertFalse(com.example.ui.DailyLivesManager.consumeOneLife(prefs, day1, 40).first)
+    val day2Pro = com.example.ui.DailyLivesManager.loadOrResetForDate(prefs, day2, 40)
+    assertEquals(40, day2Pro.remaining)
+    assertEquals(40, day2Pro.maxDaily)
+
+    // Level-up also restores to 40 for Pro subscribers
+    assertTrue(com.example.ui.DailyLivesManager.consumeOneLife(prefs, day2, 40).first)
+    val leveledUp = com.example.ui.DailyLivesManager.resetLivesForLevelUp(prefs, day2, 40)
+    assertEquals(40, leveledUp.remaining)
+    assertEquals(40, leveledUp.maxDaily)
+
+    // Expiration after 30 days marks subscription inactive automatically
+    val after31Days = now + 31L * com.example.model.ProSubscriptionState.MILLIS_PER_DAY
+    assertFalse(com.example.ui.ProSubscriptionManager.loadState(prefs, after31Days).isCurrentlyActive(after31Days))
+
+    // Deactivation clears Play token and subscription state cleanly without allowing another same-day immediate bonus
+    com.example.ui.ProSubscriptionManager.activateVerifiedPlaySubscription(
+      prefs = prefs,
+      purchaseToken = "play_sub_token_xyz_2",
+      orderId = "GPA.9999-0000",
+      purchaseTimeMillis = now,
+      nowMillis = now
+    )
+    val deactivated = com.example.ui.ProSubscriptionManager.deactivateSubscription(prefs)
+    assertFalse(deactivated.isCurrentlyActive(now))
+    assertFalse(com.example.ui.ProSubscriptionManager.loadState(prefs, now).isCurrentlyActive(now))
+    assertFalse(com.example.ui.ProSubscriptionManager.shouldGrantImmediateBonus(prefs, day1))
+  }
+
+  @Test
+  fun moderateAdFrequencyPolicy_enforcesModerateSpacing_andHidesAllAdsForPro() {
+    val startTime = 1_700_000_000_000L
+    val cooldown = com.example.model.ModerateAdFrequencyPolicy.MIN_COOLDOWN_MILLIS
+
+    // Pro subscriber never sees ads regardless of actions or cooldown
+    assertFalse(
+      com.example.model.ModerateAdFrequencyPolicy.shouldShowInterstitial(
+        isProActive = true,
+        completedActionsSinceLastAd = 10,
+        lastAdShownAtMillis = 0L,
+        nowMillis = startTime
+      )
+    )
+
+    // Fewer than 4 completed actions -> blocked
+    assertFalse(
+      com.example.model.ModerateAdFrequencyPolicy.shouldShowInterstitial(
+        isProActive = false,
+        completedActionsSinceLastAd = 3,
+        lastAdShownAtMillis = 0L,
+        nowMillis = startTime
+      )
+    )
+
+    // First eligible ad after 4 actions with no prior ad
+    assertTrue(
+      com.example.model.ModerateAdFrequencyPolicy.shouldShowInterstitial(
+        isProActive = false,
+        completedActionsSinceLastAd = 4,
+        lastAdShownAtMillis = 0L,
+        nowMillis = startTime
+      )
+    )
+
+    // Within 3-minute cooldown -> blocked even with 5 actions
+    assertFalse(
+      com.example.model.ModerateAdFrequencyPolicy.shouldShowInterstitial(
+        isProActive = false,
+        completedActionsSinceLastAd = 5,
+        lastAdShownAtMillis = startTime,
+        nowMillis = startTime + cooldown - 1_000L
+      )
+    )
+
+    // Once cooldown elapsed and >= 4 actions -> allowed
+    assertTrue(
+      com.example.model.ModerateAdFrequencyPolicy.shouldShowInterstitial(
+        isProActive = false,
+        completedActionsSinceLastAd = 4,
+        lastAdShownAtMillis = startTime,
+        nowMillis = startTime + cooldown
+      )
+    )
+
+    // Ad catalog returns non-empty content for any slot index
+    assertTrue(com.example.model.ModerateAdCatalog.ads.isNotEmpty())
+    assertEquals(com.example.model.ModerateAdCatalog.pickForSlot(0).id, com.example.model.ModerateAdCatalog.pickForSlot(4).id)
+  }
+
+  @Test
+  fun studyMaterialCatalog_andOwnershipStorage_validateSkusBundleAndRevocations() {
+    val packages = com.example.model.StudyMaterialCatalog.packages
+    assertEquals(4, packages.size)
+    assertEquals(4, packages.map { it.productId }.distinct().size)
+
+    packages.forEach { pkg ->
+      assertTrue(pkg.productId.isNotBlank())
+      assertTrue(pkg.sections.isNotEmpty())
+      assertTrue(pkg.highlightsPt.isNotEmpty())
+      assertTrue(pkg.highlightsEn.isNotEmpty())
+      assertTrue(pkg.fallbackPriceBrl.startsWith("R$"))
+    }
+
+    val algPkg = com.example.model.StudyMaterialCatalog.findByProductId(
+      com.example.model.StudyMaterialCatalog.PRODUCT_ID_ALGORITHMS_DS
+    )!!
+    val sqlPkg = com.example.model.StudyMaterialCatalog.findByProductId(
+      com.example.model.StudyMaterialCatalog.PRODUCT_ID_SQL_MASTERY
+    )!!
+    assertFalse(com.example.model.StudyMaterialCatalog.isPackageUnlocked(algPkg, emptySet()))
+    assertTrue(
+      com.example.model.StudyMaterialCatalog.isPackageUnlocked(
+        algPkg,
+        setOf(com.example.model.StudyMaterialCatalog.PRODUCT_ID_ALGORITHMS_DS)
+      )
+    )
+    assertFalse(
+      com.example.model.StudyMaterialCatalog.isPackageUnlocked(
+        sqlPkg,
+        setOf(com.example.model.StudyMaterialCatalog.PRODUCT_ID_ALGORITHMS_DS)
+      )
+    )
+
+    // Full bundle unlocks every study material package
+    val bundleOwned = setOf(com.example.model.StudyMaterialCatalog.PRODUCT_ID_FULL_BUNDLE)
+    packages.forEach { pkg ->
+      assertTrue(com.example.model.StudyMaterialCatalog.isPackageUnlocked(pkg, bundleOwned))
+    }
+
+    // Ownership storage persists verified Play productIds and clears on revocation sync
+    val prefs = InMemorySharedPreferences()
+    assertTrue(com.example.model.StudyMaterialOwnershipStorage.loadOwnedIds(prefs).isEmpty())
+    val added = com.example.model.StudyMaterialOwnershipStorage.addOwnedId(
+      prefs,
+      com.example.model.StudyMaterialCatalog.PRODUCT_ID_SQL_MASTERY
+    )
+    assertEquals(setOf(com.example.model.StudyMaterialCatalog.PRODUCT_ID_SQL_MASTERY), added)
+    val synced = com.example.model.StudyMaterialOwnershipStorage.replaceOwnedIds(prefs, emptySet())
+    assertTrue(synced.isEmpty())
+  }
+
+  @Test
+  fun languageIdleCatalog_providesUniqueSpecsAndRunnableTemplatesForAll12Languages() {
+    val techs = Technology.entries
+    assertEquals(12, techs.size)
+
+    val specs = techs.map { com.example.model.LanguageIdleCatalog.getSpec(it) }
+    assertEquals(12, specs.map { it.defaultFileName }.distinct().size)
+
+    specs.forEach { spec ->
+      assertTrue(spec.idleTitlePt.isNotBlank())
+      assertTrue(spec.idleTitleEn.isNotBlank())
+      assertTrue(spec.runtimeBadge.isNotBlank())
+      assertTrue(spec.quickTokens.isNotEmpty())
+      assertTrue("Templates missing for ${spec.tech}", spec.templates.size >= 2)
+      spec.templates.forEach { tmpl ->
+        assertTrue(tmpl.titlePt.isNotBlank())
+        assertTrue(tmpl.titleEn.isNotBlank())
+        assertTrue(tmpl.code.isNotBlank())
+      }
+    }
+
+    assertTrue(com.example.model.LanguageIdleCatalog.getSpec(Technology.HTML).supportsHtmlPreview)
+    assertTrue(com.example.model.LanguageIdleCatalog.getSpec(Technology.CSS).supportsHtmlPreview)
+    assertTrue(com.example.model.LanguageIdleCatalog.getSpec(Technology.SQL).supportsTableOutput)
+    assertTrue(com.example.model.LanguageIdleCatalog.getSpec(Technology.MYSQL).supportsTableOutput)
+    assertTrue(com.example.model.LanguageIdleCatalog.getSpec(Technology.POSTGRESQL).supportsTableOutput)
+  }
+
+  @Test
+  fun languageIdleEngine_executesAll12LanguagesAndHandlesErrorsCleanly() = kotlinx.coroutines.test.runTest {
+    val langPt = com.example.model.Language.PT
+
+    // Run every starter template across all 12 technologies cleanly
+    Technology.entries.forEach { tech ->
+      val spec = com.example.model.LanguageIdleCatalog.getSpec(tech)
+      spec.templates.forEach { tmpl ->
+        val res = com.example.idle.LanguageIdleEngine.execute(
+          tech = tech,
+          rawCode = tmpl.code,
+          language = langPt,
+          sqlLabRepository = null
+        )
+        assertEquals(
+          "Template '${tmpl.id}' for ${tech.id} failed: ${res.errorMessage}",
+          com.example.model.IdleExecutionStatus.SUCCESS,
+          res.status
+        )
+        assertTrue(res.executionTimeMs >= 1L)
+      }
+    }
+
+    // Verify concrete execution outputs
+    val pyOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.PYTHON,
+      rawCode = com.example.model.LanguageIdleCatalog.getSpec(Technology.PYTHON).templates.first().code,
+      language = langPt
+    )
+    assertTrue(pyOut.outputLines.any { it.contains("Soma dos quadrados: 55") })
+    assertTrue(pyOut.outputLines.any { it.contains("Total de metas: 4") })
+
+    val jsOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.JAVASCRIPT,
+      rawCode = com.example.model.LanguageIdleCatalog.getSpec(Technology.JAVASCRIPT).templates.first().code,
+      language = langPt
+    )
+    assertTrue(jsOut.outputLines.any { it.contains("Média calculada: 9") })
+
+    val tsOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.TYPESCRIPT,
+      rawCode = com.example.model.LanguageIdleCatalog.getSpec(Technology.TYPESCRIPT).templates.first().code,
+      language = langPt
+    )
+    assertTrue(tsOut.outputLines.any { it.contains("XP Ganho: 180") })
+
+    val ktOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.KOTLIN,
+      rawCode = com.example.model.LanguageIdleCatalog.getSpec(Technology.KOTLIN).templates.first().code,
+      language = langPt
+    )
+    assertTrue(ktOut.outputLines.any { it.contains("Total final: 150") })
+
+    val javaOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.JAVA,
+      rawCode = com.example.model.LanguageIdleCatalog.getSpec(Technology.JAVA).templates.first().code,
+      language = langPt
+    )
+    assertTrue(javaOut.outputLines.any { it.contains("5 x 7 = 35") })
+
+    val goOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.GO,
+      rawCode = com.example.model.LanguageIdleCatalog.getSpec(Technology.GO).templates.first().code,
+      language = langPt
+    )
+    assertTrue(goOut.outputLines.any { it.contains("Soma total: 30") })
+
+    val mongoOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.MONGODB,
+      rawCode = "db.study_notes.insertOne({ techId: \"go\", title: \"Goroutines\" })\ndb.study_notes.countDocuments({ techId: \"go\" })",
+      language = langPt
+    )
+    assertEquals(com.example.model.IdleExecutionStatus.SUCCESS, mongoOut.status)
+    assertTrue(mongoOut.outputLines.any { it.contains("\"acknowledged\": true") })
+    assertEquals("1", mongoOut.outputLines.last())
+
+    val htmlOut = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.HTML,
+      rawCode = "<h1>Hello IDLE</h1>",
+      language = langPt
+    )
+    assertNotNull(htmlOut.htmlPreviewDocument)
+    assertTrue(htmlOut.htmlPreviewDocument!!.contains("<h1>Hello IDLE</h1>"))
+
+    val cssErr = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.CSS,
+      rawCode = "body { color: red;",
+      language = langPt
+    )
+    assertEquals(com.example.model.IdleExecutionStatus.ERROR, cssErr.status)
+    assertNotNull(cssErr.errorMessage)
+
+    val blankErr = com.example.idle.LanguageIdleEngine.execute(
+      tech = Technology.PYTHON,
+      rawCode = "   ",
+      language = langPt
+    )
+    assertEquals(com.example.model.IdleExecutionStatus.ERROR, blankErr.status)
+  }
+
+  @Test
+  fun languageIdleCodeStorage_savesLoadsAndResetsPerLanguage() {
+    val prefs = InMemorySharedPreferences()
+    val defaultPy = com.example.model.LanguageIdleCatalog.getSpec(Technology.PYTHON).templates.first().code
+    val defaultKt = com.example.model.LanguageIdleCatalog.getSpec(Technology.KOTLIN).templates.first().code
+
+    assertEquals(defaultPy, com.example.model.LanguageIdleCodeStorage.loadCode(prefs, Technology.PYTHON))
+    assertEquals(defaultKt, com.example.model.LanguageIdleCodeStorage.loadCode(prefs, Technology.KOTLIN))
+
+    com.example.model.LanguageIdleCodeStorage.saveCode(prefs, Technology.PYTHON, "print(42)")
+    assertEquals("print(42)", com.example.model.LanguageIdleCodeStorage.loadCode(prefs, Technology.PYTHON))
+    // Saving Python must not alter Kotlin code
+    assertEquals(defaultKt, com.example.model.LanguageIdleCodeStorage.loadCode(prefs, Technology.KOTLIN))
+
+    val resetPy = com.example.model.LanguageIdleCodeStorage.resetToDefault(prefs, Technology.PYTHON)
+    assertEquals(defaultPy, resetPy)
+    assertEquals(defaultPy, com.example.model.LanguageIdleCodeStorage.loadCode(prefs, Technology.PYTHON))
+  }
+
+  @Test
+  fun languageTaskProgressCalculator_computesPerLanguageAndOverallPercentagesAccurately() {
+    // 1. Empty completion state -> 12 technologies, all at 0%
+    val emptyAll = com.example.model.LanguageTaskProgressCalculator.computeAll()
+    assertEquals(12, emptyAll.size)
+    emptyAll.forEach { summary ->
+      assertEquals(0, summary.completedTasks)
+      assertEquals(0, summary.progressPercent)
+      assertEquals(0f, summary.progressFraction, 0.0001f)
+      assertFalse(summary.isStarted)
+      assertFalse(summary.isCompletedAll)
+      assertTrue(summary.totalTasks > 0)
+    }
+    val emptyOverall = com.example.model.LanguageTaskProgressCalculator.computeOverall(emptyAll)
+    assertEquals(0, emptyOverall.completedTasks)
+    assertEquals(0, emptyOverall.progressPercent)
+    assertEquals(0, emptyOverall.startedLanguagesCount)
+    assertEquals(12, emptyOverall.totalLanguagesCount)
+
+    // 2. Completing a single Python lesson guarantees >= 1% (not truncated to 0%) and does not affect Kotlin
+    val pyLessons = com.example.data.repository.TechCourseModulesRepository.getAllLessonIds(Technology.PYTHON).toList()
+    val pyChallenges = com.example.data.challenges.TechChallengeBank.getChallenges(Technology.PYTHON)
+    val pyQuizzes = TechContentRepository.getQuizQuestions(Technology.PYTHON)
+
+    val oneLessonSummaries = com.example.model.LanguageTaskProgressCalculator.computeAll(
+      completedLessonIds = setOf(pyLessons.first())
+    )
+    val pyOne = oneLessonSummaries.first { it.tech == Technology.PYTHON }
+    val ktOne = oneLessonSummaries.first { it.tech == Technology.KOTLIN }
+    assertEquals(1, pyOne.completedLessons)
+    assertEquals(1, pyOne.completedTasks)
+    assertTrue(pyOne.isStarted)
+    assertTrue(pyOne.progressPercent in 1..99)
+    assertEquals(0, ktOne.completedTasks)
+    assertEquals(0, ktOne.progressPercent)
+
+    // 3. Multi-category aggregation (lessons + challenges + quizzes + scheduled sessions)
+    val sessions = listOf(
+      com.example.model.StudySession(
+        id = 1L,
+        tech = Technology.KOTLIN,
+        titlePt = "Coroutines",
+        titleEn = "Coroutines",
+        topicPt = "Coroutines na prática",
+        topicEn = "Coroutines practice",
+        dateIso = "2026-11-17",
+        durationMinutes = 45,
+        isCompleted = true
+      ),
+      com.example.model.StudySession(
+        id = 2L,
+        tech = Technology.KOTLIN,
+        titlePt = "Flow",
+        titleEn = "Flow",
+        topicPt = "Kotlin Flow",
+        topicEn = "Kotlin Flow",
+        dateIso = "2026-11-18",
+        durationMinutes = 30,
+        isCompleted = false
+      )
+    )
+    val mixedSummaries = com.example.model.LanguageTaskProgressCalculator.computeAll(
+      completedActivityIds = setOf(pyChallenges[0].id, pyChallenges[1].id),
+      completedQuizIds = setOf(pyQuizzes[0].id),
+      completedLessonIds = setOf(pyLessons[0]),
+      sessions = sessions
+    )
+    val pyMixed = mixedSummaries.first { it.tech == Technology.PYTHON }
+    assertEquals(1, pyMixed.completedLessons)
+    assertEquals(2, pyMixed.completedChallenges)
+    assertEquals(1, pyMixed.completedQuizzes)
+    assertEquals(0, pyMixed.completedSessions)
+    assertEquals(4, pyMixed.completedTasks)
+
+    val ktMixed = mixedSummaries.first { it.tech == Technology.KOTLIN }
+    assertEquals(1, ktMixed.completedSessions)
+    assertEquals(2, ktMixed.totalSessions)
+    assertEquals(1, ktMixed.completedTasks)
+
+    val mixedOverall = com.example.model.LanguageTaskProgressCalculator.computeOverall(mixedSummaries)
+    assertEquals(5, mixedOverall.completedTasks)
+    assertEquals(2, mixedOverall.startedLanguagesCount)
+    assertTrue(mixedOverall.progressPercent in 1..99)
+
+    // 4. Full completion of every study task in Go -> exactly 100%
+    val goLessons = com.example.data.repository.TechCourseModulesRepository.getAllLessonIds(Technology.GO).toSet()
+    val goChallenges = com.example.data.challenges.TechChallengeBank.getChallenges(Technology.GO).map { it.id }.toSet()
+    val goQuizzes = TechContentRepository.getQuizQuestions(Technology.GO).map { it.id }.toSet()
+    val goSummary = com.example.model.LanguageTaskProgressCalculator.computeForTech(
+      tech = Technology.GO,
+      completedActivityIds = goChallenges,
+      completedQuizIds = goQuizzes,
+      completedLessonIds = goLessons,
+      sessions = emptyList()
+    )
+    assertTrue(goSummary.isCompletedAll)
+    assertEquals(100, goSummary.progressPercent)
+    assertEquals(1f, goSummary.progressFraction, 0.0001f)
+    assertEquals(goSummary.totalTasks, goSummary.completedTasks)
+  }
+
+  @Test
+  fun appLocaleHelper_mapsLanguagesToLocalesAndPersistsSelection() {
+    val prefs = InMemorySharedPreferences()
+    // Default when unset is Portuguese
+    assertEquals(
+      com.example.model.Language.PT,
+      com.example.util.AppLocaleHelper.loadSavedLanguage(prefs)
+    )
+
+    val ptLocale = com.example.util.AppLocaleHelper.toLocale(com.example.model.Language.PT)
+    assertEquals("pt", ptLocale.language)
+    assertEquals("BR", ptLocale.country)
+
+    val enLocale = com.example.util.AppLocaleHelper.toLocale(com.example.model.Language.EN)
+    assertEquals("en", enLocale.language)
+    assertEquals("US", enLocale.country)
+
+    com.example.util.AppLocaleHelper.saveLanguage(prefs, com.example.model.Language.EN)
+    assertEquals(
+      com.example.model.Language.EN,
+      com.example.util.AppLocaleHelper.loadSavedLanguage(prefs)
+    )
+
+    com.example.util.AppLocaleHelper.saveLanguage(prefs, com.example.model.Language.PT)
+    assertEquals(
+      com.example.model.Language.PT,
+      com.example.util.AppLocaleHelper.loadSavedLanguage(prefs)
+    )
+  }
+
   private class InMemorySharedPreferences : android.content.SharedPreferences {
     private val data = mutableMapOf<String, Any?>()
     override fun getAll(): MutableMap<String, *> = data.toMutableMap()
@@ -688,9 +1665,9 @@ class ExampleUnitTest {
     private val flow = kotlinx.coroutines.flow.MutableStateFlow<List<com.example.data.local.UserBadgeEntity>>(emptyList())
 
     override fun getAllBadges() = flow
-    override fun getUnlockedBadges() = kotlinx.coroutines.flow.flowOf(map.values.filter { it.isUnlocked })
-    override fun getUnlockedCount() = kotlinx.coroutines.flow.flowOf(map.values.count { it.isUnlocked })
-    override fun getTotalCount() = kotlinx.coroutines.flow.flowOf(map.size)
+    override fun getUnlockedBadges() = kotlinx.coroutines.flow.flow { flow.collect { list -> emit(list.filter { it.isUnlocked }) } }
+    override fun getUnlockedCount() = kotlinx.coroutines.flow.flow { flow.collect { list -> emit(list.count { it.isUnlocked }) } }
+    override fun getTotalCount() = kotlinx.coroutines.flow.flow { flow.collect { list -> emit(list.size) } }
 
     override suspend fun insertOrUpdateBadges(badges: List<com.example.data.local.UserBadgeEntity>) {
       badges.forEach { map[it.id] = it }

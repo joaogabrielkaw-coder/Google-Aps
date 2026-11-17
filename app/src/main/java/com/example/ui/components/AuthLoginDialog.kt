@@ -73,7 +73,12 @@ import com.example.model.AuthMethod
 import com.example.model.Language
 import com.example.model.UserAccount
 import com.example.model.UserScoreInfo
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material.icons.filled.Palette
+import com.example.data.local.UserBadgeEntity
 import com.example.ui.theme.LocalDevRoutineColors
 
 @Composable
@@ -82,6 +87,7 @@ fun AuthLoginDialog(
     scoreInfo: UserScoreInfo,
     streakDays: Int,
     badgesCount: Int,
+    badges: List<UserBadgeEntity> = emptyList(),
     language: Language,
     isLoading: Boolean,
     onGoogleSignIn: (extraPhoneNumber: String) -> Unit,
@@ -116,6 +122,7 @@ fun AuthLoginDialog(
             ),
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 660.dp)
                 .padding(8.dp)
                 .testTag("dialog_auth_login")
         ) {
@@ -147,7 +154,7 @@ fun AuthLoginDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = if (userAccount?.isLoggedIn == true) {
-                                if (isPt) "Perfil & Placar" else "Profile & Scoreboard"
+                                if (isPt) "Perfil & Conquistas" else "Profile & Achievements"
                             } else {
                                 if (isPt) "Identificação do Usuário" else "User Sign-In"
                             },
@@ -157,13 +164,15 @@ fun AuthLoginDialog(
 
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(28.dp).testTag("btn_close_auth_dialog")
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("btn_close_auth_dialog")
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // IF USER IS ALREADY LOGGED IN
                 if (userAccount != null && userAccount.isLoggedIn) {
@@ -172,6 +181,7 @@ fun AuthLoginDialog(
                         scoreInfo = scoreInfo,
                         streakDays = streakDays,
                         badgesCount = badgesCount,
+                        badges = badges,
                         language = language,
                         isLoading = isLoading,
                         onUpdatePhoto = onUpdatePhoto,
@@ -405,6 +415,7 @@ private fun LoggedInProfileView(
     scoreInfo: UserScoreInfo,
     streakDays: Int,
     badgesCount: Int,
+    badges: List<UserBadgeEntity>,
     language: Language,
     isLoading: Boolean,
     onUpdatePhoto: (String) -> Unit,
@@ -417,9 +428,29 @@ private fun LoggedInProfileView(
     val PurplePrimary = brand.primary
     val RedAccent = brand.accent
     var showPhotoDialog by remember { mutableStateOf(false) }
+    var selectedBadgeDetail by remember { mutableStateOf<UserBadgeEntity?>(null) }
+    var showAllAchievementsModal by remember { mutableStateOf(false) }
+
+    selectedBadgeDetail?.let { badge ->
+        BadgeDetailDialog(
+            badge = badge,
+            language = language,
+            onDismiss = { selectedBadgeDetail = null }
+        )
+    }
+
+    if (showAllAchievementsModal) {
+        UserProfileAchievementsModal(
+            badges = badges,
+            language = language,
+            onDismiss = { showAllAchievementsModal = false }
+        )
+    }
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Avatar interativo com suporte a foto de galeria e avatares dev
@@ -543,7 +574,11 @@ private fun LoggedInProfileView(
             }
 
             Surface(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showAllAchievementsModal = true }
+                    .testTag("card_profile_badges_stat"),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
@@ -559,7 +594,17 @@ private fun LoggedInProfileView(
             }
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Vitrine de Conquistas & Marcos do Perfil (ex: '10 Horas de SQL', 'Python Iniciante')
+        UserProfileBadgesShowcase(
+            badges = badges,
+            language = language,
+            onBadgeClick = { selectedBadgeDetail = it },
+            onViewAllAchievements = { showAllAchievementsModal = true }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Action: Sincronizar Placar
         Button(

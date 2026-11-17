@@ -25,26 +25,45 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,16 +82,22 @@ import androidx.compose.ui.window.Dialog
 import com.example.model.DeveloperLevelCatalog
 import com.example.model.Language
 import com.example.model.LevelUpEvent
+import com.example.model.LifePaymentMethod
+import com.example.model.LifePurchaseCurrency
+import com.example.model.LifePurchaseReceipt
+import com.example.model.LifePurchaseResult
+import com.example.model.LifeShopCatalog
+import com.example.model.LifeShopPackage
+import com.example.model.PlayBillingConnectionStatus
+import com.example.model.PlayBillingStoreUiState
+import com.example.model.ProSubscriptionPlan
+import com.example.model.ProSubscriptionState
 import com.example.model.UserScoreInfo
 import com.example.ui.DailyLivesInfo
 import com.example.ui.theme.LocalAccessibilitySettings
 import com.example.ui.theme.LocalDevRoutineColors
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.WorkspacePremium
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -90,12 +115,14 @@ private val SoftLavender = Color(0xFFC4B5FD)
 private val WarmPeach = Color(0xFFFDBA74)
 
 /**
- * Pill decorativa com coração pulsante exibindo as vidas diárias restantes (25/25).
+ * Pill decorativa com coração pulsante exibindo as vidas diárias restantes (25/25)
+ * e um botão "+" ao lado dos corações para abrir a interface de compra de vidas extras.
  */
 @Composable
 fun DailyLivesPill(
     livesInfo: DailyLivesInfo,
     onClick: () -> Unit,
+    onAddLivesClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val reduceMotion = LocalAccessibilitySettings.current.reduceMotion
@@ -113,53 +140,89 @@ fun DailyLivesPill(
     val isLow = livesInfo.remaining <= 5
     val isEmpty = livesInfo.remaining <= 0
 
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isEmpty) Color(0xFF3A1D2B) else HeartRose.copy(alpha = 0.16f),
-        border = BorderStroke(
-            width = 1.2.dp,
-            brush = Brush.linearGradient(listOf(HeartRose, HeartCoral))
-        ),
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
-            .minimumInteractiveComponentSize()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .testTag("pill_daily_lives")
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = if (isEmpty) Color(0xFF3A1D2B) else HeartRose.copy(alpha = 0.16f),
+            border = BorderStroke(
+                width = 1.2.dp,
+                brush = Brush.linearGradient(listOf(HeartRose, HeartCoral))
+            ),
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(onClick = onClick)
+                .testTag("pill_daily_lives")
         ) {
-            Icon(
-                imageVector = if (isEmpty) Icons.Default.FavoriteBorder else Icons.Default.Favorite,
-                contentDescription = "Vidas Diárias",
-                tint = if (isEmpty) Color(0xFFFCA5A5) else HeartRose,
+            Row(
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (isEmpty) Icons.Default.FavoriteBorder else Icons.Default.Favorite,
+                    contentDescription = "Vidas Diárias",
+                    tint = if (isEmpty) Color(0xFFFCA5A5) else HeartRose,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .scale(if (isLow || isEmpty) 1f else pulse)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${livesInfo.remaining}/${livesInfo.maxDaily}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = if (isEmpty) Color(0xFFFCA5A5) else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        if (onAddLivesClick != null) {
+            Box(
+                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(16.dp)
-                    .scale(if (isLow || isEmpty) 1f else pulse)
-            )
-            Spacer(modifier = Modifier.width(5.dp))
-            Text(
-                text = "${livesInfo.remaining}/${livesInfo.maxDaily}",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = if (isEmpty) Color(0xFFFCA5A5) else MaterialTheme.colorScheme.onSurface
-            )
+                    .minimumInteractiveComponentSize()
+                    .clip(CircleShape)
+                    .clickable(onClick = onAddLivesClick)
+                    .testTag("btn_add_lives_plus")
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = HeartRose,
+                    border = BorderStroke(1.2.dp, GoldSpark),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Comprar mais vidas",
+                            tint = Color.White,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 /**
- * Cartão enfeitado para Dashboard/Trilha exibindo as 25 vidas diárias com barra decorada.
+ * Cartão enfeitado para Dashboard/Trilha exibindo as 25 vidas diárias com barra decorada
+ * e botão "+" ao lado dos corações para abrir a loja de vidas extras.
  */
 @Composable
 fun DailyLivesBannerCard(
     livesInfo: DailyLivesInfo,
     language: Language,
     onClick: () -> Unit = {},
+    onAddLivesClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isPt = language == Language.PT
+    val isEmpty = livesInfo.remaining <= 0
     val fraction = (livesInfo.remaining.toFloat() / livesInfo.maxDaily.coerceAtLeast(1)).coerceIn(0f, 1f)
 
     Card(
@@ -167,7 +230,10 @@ fun DailyLivesBannerCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         border = BorderStroke(
             width = 1.2.dp,
-            brush = Brush.linearGradient(listOf(HeartRose, WarmPeach, PurplePrimary))
+            brush = Brush.linearGradient(
+                if (isEmpty) listOf(RedAccent, HeartRose, WarmPeach)
+                else listOf(HeartRose, WarmPeach, PurplePrimary)
+            )
         ),
         modifier = modifier
             .fillMaxWidth()
@@ -192,7 +258,7 @@ fun DailyLivesBannerCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Favorite,
+                            imageVector = if (isEmpty) Icons.Default.ShoppingCart else Icons.Default.Favorite,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(22.dp)
@@ -206,22 +272,59 @@ fun DailyLivesBannerCard(
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = if (isPt) "25 vidas novas todo dia • 1 vida por tentativa"
-                            else "25 fresh lives every day • 1 life per attempt",
+                            text = when {
+                                isEmpty && isPt -> "Cota diária zerada • Toque no + para comprar vidas ❤️"
+                                isEmpty -> "Daily quota depleted • Tap + to buy lives ❤️"
+                                isPt -> "Toque em + para comprar +10, +20 ou +50 vidas"
+                                else -> "Tap + to buy +10, +20 or +50 extra lives"
+                            },
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isEmpty) HeartRose else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (isEmpty) FontWeight.SemiBold else FontWeight.Normal
                         )
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    repeat(3) { index ->
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = if (index == 1) GoldSpark else HeartRose.copy(alpha = 0.85f),
-                            modifier = Modifier.size(14.dp)
-                        )
+                if (onAddLivesClick != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = HeartRose,
+                        border = BorderStroke(1.2.dp, GoldSpark),
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(onClick = onAddLivesClick)
+                            .testTag("btn_banner_add_lives_plus")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = if (isPt) "Comprar vidas extras" else "Buy extra lives",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = if (isPt) "Vidas" else "Lives",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        repeat(3) { index ->
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = if (index == 1) GoldSpark else HeartRose.copy(alpha = 0.85f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -242,15 +345,842 @@ fun DailyLivesBannerCard(
 }
 
 /**
+ * Seção reutilizável de compra de vidas usando XP disponível ou Cristais 3D.
+ * Exibida automaticamente quando a cota diária de 25 vidas chega a 0.
+ */
+@Composable
+fun LifePurchaseOptionsSection(
+    language: Language,
+    availableXp: Int,
+    availableCrystals: Int,
+    onPurchasePackage: (LifeShopPackage) -> LifePurchaseResult?,
+    onOpen3DGame: (() -> Unit)? = null,
+    feedbackMessage: String? = null,
+    isFeedbackError: Boolean = false,
+    darkSurface: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val isPt = language == Language.PT
+    val titleColor = if (darkSurface) Color.White else MaterialTheme.colorScheme.onSurface
+    val subTextColor = if (darkSurface) Color(0xFFB8B0D8) else MaterialTheme.colorScheme.onSurfaceVariant
+    val cardBg = if (darkSurface) Color(0xFF1E1A2E) else MaterialTheme.colorScheme.surfaceVariant
+    val hasMinCrystalsForPack = LifeShopCatalog.packages
+        .filter { it.currency == LifePurchaseCurrency.CRYSTALS }
+        .any { availableCrystals >= it.costAmount }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("section_life_purchase_options"),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Minimal header with inline XP & Crystal balances
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isPt) "Resgatar grátis" else "Redeem free",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = subTextColor
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = PurplePrimary.copy(alpha = 0.16f)
+                ) {
+                    Text(
+                        text = "$availableXp XP",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = GoldSpark,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = EmeraldGlow.copy(alpha = 0.16f)
+                ) {
+                    Text(
+                        text = "$availableCrystals 💎",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = EmeraldGlow,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        }
+
+        if (!feedbackMessage.isNullOrBlank()) {
+            Text(
+                text = feedbackMessage,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (isFeedbackError) Color(0xFFFCA5A5) else subTextColor,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        // Smaller aligned side-by-side buttons for XP & Crystal packs
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LifeShopCatalog.packages.forEach { pkg ->
+                val canAfford = when (pkg.currency) {
+                    LifePurchaseCurrency.BRL -> true
+                    LifePurchaseCurrency.XP -> availableXp >= pkg.costAmount
+                    LifePurchaseCurrency.CRYSTALS -> availableCrystals >= pkg.costAmount
+                }
+                val isCrystalPack = pkg.currency == LifePurchaseCurrency.CRYSTALS
+                val pillColor = when {
+                    !canAfford -> Color(0xFF3E3854)
+                    isCrystalPack -> Color(0xFF15803D)
+                    else -> HeartRose
+                }
+                val borderColor = when {
+                    canAfford && isCrystalPack -> EmeraldGlow.copy(alpha = 0.45f)
+                    canAfford -> HeartRose.copy(alpha = 0.45f)
+                    else -> Color(0xFF2E2842)
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = cardBg,
+                    border = BorderStroke(1.dp, borderColor),
+                    modifier = Modifier
+                        .weight(1f)
+                        .minimumInteractiveComponentSize()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onPurchasePackage(pkg) }
+                        .testTag("btn_buy_lives_${pkg.id}")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = HeartRose,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "+${pkg.livesAmount}",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = titleColor
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = pillColor,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (isCrystalPack) "${pkg.costAmount} 💎" else "${pkg.costAmount} XP",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 2.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!hasMinCrystalsForPack && onOpen3DGame != null) {
+            OutlinedButton(
+                onClick = onOpen3DGame,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, EmeraldGlow.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
+                    .testTag("btn_open_3d_game_for_crystals")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SportsEsports,
+                    contentDescription = null,
+                    tint = EmeraldGlow,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isPt) "Coletar Cristais no Jogo 3D" else "Earn Crystals in 3D Game",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = EmeraldGlow
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Interface minimalista de Compra de Vidas Extras (aberta pelo botão "+" ao lado dos corações).
+ * Exibe os pacotes em Reais (10 por R$ 5, 20 por R$ 10, 50 por R$ 35) e opções XP/Cristais
+ * com botões compactos alinhados lado a lado, além do atalho para a assinatura DevRoutine Pro.
+ */
+@Composable
+fun LifePurchaseShopDialog(
+    livesInfo: DailyLivesInfo,
+    language: Language,
+    availableXp: Int,
+    availableCrystals: Int,
+    proSubscriptionState: ProSubscriptionState = ProSubscriptionState(),
+    billingStoreState: PlayBillingStoreUiState = PlayBillingStoreUiState(),
+    externalConfirmedReceipt: LifePurchaseReceipt? = null,
+    onPurchaseLives: (LifeShopPackage, LifePaymentMethod?) -> LifePurchaseResult?,
+    onLaunchRealBrlPurchase: (LifeShopPackage) -> Unit = {},
+    onRestorePurchases: () -> Unit = {},
+    onClearExternalReceipt: () -> Unit = {},
+    onOpenProSubscription: (() -> Unit)? = null,
+    onOpen3DGame: (() -> Unit)? = null,
+    onDismiss: () -> Unit
+) {
+    val isPt = language == Language.PT
+    var selectedBrlPackage by remember { mutableStateOf<LifeShopPackage?>(null) }
+    var localConfirmedReceipt by remember { mutableStateOf<LifePurchaseReceipt?>(null) }
+    var shopFeedback by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    val activeReceipt = externalConfirmedReceipt ?: localConfirmedReceipt
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF151221)),
+            border = BorderStroke(1.dp, Color(0xFF2D2742)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp)
+                .testTag("dialog_life_purchase_shop")
+        ) {
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Minimalist Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (selectedBrlPackage != null && activeReceipt == null) {
+                            IconButton(
+                                onClick = { selectedBrlPackage = null },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("btn_back_to_life_catalog")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = if (isPt) "Voltar" else "Back",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = HeartRose,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Text(
+                            text = when {
+                                activeReceipt != null -> if (isPt) "Confirmado!" else "Confirmed!"
+                                selectedBrlPackage != null -> if (isPt) "Google Play" else "Checkout"
+                                isPt -> "Loja de Vidas"
+                                else -> "Lives Shop"
+                            },
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                            color = Color.White
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = HeartRose.copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, HeartRose.copy(alpha = 0.4f))
+                        ) {
+                            Text(
+                                text = "${livesInfo.remaining} ❤️",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .testTag("btn_close_life_shop")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = if (isPt) "Fechar" else "Close",
+                            tint = Color(0xFFB8B0D8),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                when {
+                    // Step 3: Confirmation receipt
+                    activeReceipt != null -> {
+                        val receipt = activeReceipt
+                        val totalLivesAdded = receipt.pkg.livesAmount * receipt.quantity.coerceAtLeast(1)
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF1E1A2E),
+                            border = BorderStroke(1.dp, EmeraldGlow.copy(alpha = 0.55f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("card_life_purchase_receipt")
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = EmeraldGlow,
+                                    modifier = Modifier.size(38.dp)
+                                )
+                                Text(
+                                    text = if (isPt) "+$totalLivesAdded vidas adicionadas"
+                                    else "+$totalLivesAdded lives added",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = buildString {
+                                        append(receipt.pkg.formattedPrice(language, billingStoreState.productPrices))
+                                        receipt.paymentMethod?.let { method ->
+                                            append(" • ")
+                                            append(method.label(language))
+                                        }
+                                        append(" • ")
+                                        append(if (isPt) "Saldo: ${receipt.newRemainingLives} ❤️" else "Balance: ${receipt.newRemainingLives} ❤️")
+                                    },
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFDCD6F7),
+                                    textAlign = TextAlign.Center
+                                )
+                                receipt.orderId?.takeIf { it.isNotBlank() }?.let { oid ->
+                                    Text(
+                                        text = if (isPt) "Pedido: $oid" else "Order: $oid",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFF9E96BD),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    localConfirmedReceipt = null
+                                    onClearExternalReceipt()
+                                    selectedBrlPackage = null
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, SoftLavender.copy(alpha = 0.5f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                            ) {
+                                Text(
+                                    text = if (isPt) "Mais" else "More",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Button(
+                                onClick = onDismiss,
+                                colors = ButtonDefaults.buttonColors(containerColor = HeartRose),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                            ) {
+                                Text(
+                                    text = if (isPt) "Praticar" else "Practice",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+
+                    // Step 2: Real Google Play Billing Checkout for selected BRL package
+                    selectedBrlPackage != null -> {
+                        val pkg = selectedBrlPackage!!
+                        val projectedLives = livesInfo.remaining + pkg.livesAmount
+                        val livePrice = pkg.formattedPrice(language, billingStoreState.productPrices)
+                        val isPending = pkg.playProductId != null && pkg.playProductId in billingStoreState.pendingProductIds
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFF1E1A2E),
+                            border = BorderStroke(1.dp, Color(0xFF332C4A)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "+${pkg.livesAmount} " + if (isPt) "vidas extras" else "extra lives",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "${livesInfo.remaining} ❤️ → $projectedLives ❤️",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = EmeraldGlow
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF16A34A).copy(alpha = 0.2f)
+                                ) {
+                                    Text(
+                                        text = livePrice,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = EmeraldGlow,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1A1629),
+                            border = BorderStroke(1.dp, Color(0xFF332C4A)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = if (isPt) "Cobrança real via Google Play Billing" else "Real billing via Google Play",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = if (isPt) {
+                                        "Aceita Pix, Cartão de Crédito e Saldo Play direto no checkout oficial do Google Play."
+                                    } else {
+                                        "Supports Pix, Credit Card, and Play Balance directly in Google Play checkout."
+                                    },
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFB8B0D8)
+                                )
+                                val connectionLabel = when (billingStoreState.connectionStatus) {
+                                    PlayBillingConnectionStatus.READY ->
+                                        if (pkg.playProductId != null && billingStoreState.isProductReadyInPlay(pkg.playProductId)) {
+                                            if (isPt) "• Play Store conectada e produto ativo" else "• Play Store connected & SKU active"
+                                        } else {
+                                            if (isPt) "• Play Store conectada (aguardando SKU no Play Console)" else "• Play Store connected (awaiting Play Console SKU)"
+                                        }
+                                    PlayBillingConnectionStatus.CONNECTING ->
+                                        if (isPt) "• Conectando ao Google Play..." else "• Connecting to Google Play..."
+                                    PlayBillingConnectionStatus.UNAVAILABLE ->
+                                        if (isPt) "• Google Play Billing indisponível neste dispositivo" else "• Google Play Billing unavailable on device"
+                                    PlayBillingConnectionStatus.DISCONNECTED ->
+                                        if (isPt) "• Play Billing desconectado — toque para tentar novamente" else "• Play Billing disconnected — tap to retry"
+                                }
+                                Text(
+                                    text = connectionLabel,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (billingStoreState.connectionStatus == PlayBillingConnectionStatus.READY) EmeraldGlow else Color(0xFFFCD34D)
+                                )
+                            }
+                        }
+
+                        if (isPending) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF422006),
+                                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.6f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = if (isPt) {
+                                        "Pagamento pendente no Google Play. As vidas serão liberadas assim que a compensação confirmar."
+                                    } else {
+                                        "Payment pending in Google Play. Lives unlock as soon as payment settles."
+                                    },
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFFDE68A),
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
+                        billingStoreState.statusMessage?.let { msg ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (billingStoreState.isError) Color(0xFF3F1D2B) else Color(0xFF172554),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (billingStoreState.isError) HeartRose.copy(alpha = 0.6f) else Color(0xFF60A5FA).copy(alpha = 0.5f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = msg,
+                                    fontSize = 11.sp,
+                                    color = if (billingStoreState.isError) Color(0xFFFDA4AF) else Color(0xFFBFDBFE),
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { selectedBrlPackage = null },
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFF3E355E)),
+                                modifier = Modifier
+                                    .weight(0.9f)
+                                    .height(44.dp)
+                            ) {
+                                Text(
+                                    text = if (isPt) "Voltar" else "Back",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                            Button(
+                                onClick = { onLaunchRealBrlPurchase(pkg) },
+                                enabled = !billingStoreState.isPurchaseInProgress,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1.5f)
+                                    .height(44.dp)
+                                    .testTag("btn_confirm_brl_purchase")
+                            ) {
+                                Text(
+                                    text = if (billingStoreState.isPurchaseInProgress) {
+                                        if (isPt) "Abrindo Play..." else "Opening Play..."
+                                    } else {
+                                        if (isPt) "Pagar no Google Play" else "Pay with Google Play"
+                                    },
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = onRestorePurchases,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFF3E355E)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .testTag("btn_restore_life_purchases")
+                        ) {
+                            Text(
+                                text = if (isPt) "Verificar / Restaurar compra no Play" else "Check / Restore Play purchase",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFDCD6F7)
+                            )
+                        }
+                    }
+
+                    // Step 1: Minimalist catalog with compact aligned buttons side by side
+                    else -> {
+                        if (onOpenProSubscription != null) {
+                            val isSubActive = proSubscriptionState.isCurrentlyActive()
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSubActive) Color(0xFF152E24) else Color(0xFF1E1930),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSubActive) EmeraldGlow.copy(alpha = 0.5f) else GoldSpark.copy(alpha = 0.45f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable {
+                                        onDismiss()
+                                        onOpenProSubscription()
+                                    }
+                                    .testTag("card_pro_subscription_banner")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.WorkspacePremium,
+                                        contentDescription = null,
+                                        tint = if (isSubActive) EmeraldGlow else GoldSpark,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isSubActive) {
+                                                if (isPt) "Pro Ativo" else "Pro Active"
+                                            } else {
+                                                if (isPt) "Sem Anúncios +15/dia" else "Ad-Free +15/day"
+                                            },
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = if (isSubActive) {
+                                                if (isPt) "40 vidas diárias • ${proSubscriptionState.remainingDays()}d"
+                                                else "40 daily lives • ${proSubscriptionState.remainingDays()}d"
+                                            } else {
+                                                if (isPt) "40 vidas todo dia" else "40 lives daily"
+                                            },
+                                            fontSize = 10.sp,
+                                            color = Color(0xFFB8B0D8)
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(9.dp),
+                                        color = if (isSubActive) EmeraldGlow else GoldSpark,
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .clip(RoundedCornerShape(9.dp))
+                                            .clickable {
+                                                onDismiss()
+                                                onOpenProSubscription()
+                                            }
+                                            .testTag("btn_open_pro_subscription")
+                                    ) {
+                                        Text(
+                                            text = if (isSubActive) {
+                                                if (isPt) "Ativa" else "Active"
+                                            } else {
+                                                val playMonthlyPrice = billingStoreState.productPrices[ProSubscriptionPlan.PRODUCT_ID_PRO_MONTHLY]
+                                                if (!playMonthlyPrice.isNullOrBlank()) {
+                                                    if (isPt) "$playMonthlyPrice/mês" else "$playMonthlyPrice/mo"
+                                                } else {
+                                                    if (isPt) "R$ 13/mês" else "R$ 13/mo"
+                                                }
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isSubActive) Color.White else Color(0xFF1F1638),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = if (isPt) "Pacotes de vidas" else "Life packs",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB8B0D8)
+                        )
+
+                        // 3 compact aligned buttons side by side: +10 (R$ 5), +20 (R$ 10), +50 (R$ 35)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            LifeShopCatalog.brlPackages.forEach { pkg ->
+                                val isBest = pkg.livesAmount == 50
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color(0xFF1E1A2E),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isBest) GoldSpark.copy(alpha = 0.6f) else HeartRose.copy(alpha = 0.45f)
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .minimumInteractiveComponentSize()
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .clickable { selectedBrlPackage = pkg }
+                                        .testTag("card_brl_pack_${pkg.id}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 6.dp, vertical = 10.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Favorite,
+                                                contentDescription = null,
+                                                tint = HeartRose,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = "+${pkg.livesAmount}",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White
+                                            )
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFF16A34A),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("btn_buy_brl_${pkg.id}")
+                                        ) {
+                                            Text(
+                                                text = pkg.formattedPrice(language, billingStoreState.productPrices),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color.White,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        LifePurchaseOptionsSection(
+                            language = language,
+                            availableXp = availableXp,
+                            availableCrystals = availableCrystals,
+                            feedbackMessage = shopFeedback?.first ?: if (livesInfo.remaining > 0) {
+                                if (isPt) "XP e Cristais liberam quando suas vidas chegarem a 0."
+                                else "XP & Crystals unlock when lives reach 0."
+                            } else null,
+                            isFeedbackError = shopFeedback?.second ?: false,
+                            darkSurface = true,
+                            onPurchasePackage = { pkg ->
+                                val result = onPurchaseLives(pkg, null)
+                                when (result) {
+                                    is LifePurchaseResult.Success -> {
+                                        shopFeedback = null
+                                        localConfirmedReceipt = LifePurchaseReceipt(
+                                            pkg = result.pkg,
+                                            newRemainingLives = result.newRemainingLives,
+                                            paymentMethod = null
+                                        )
+                                    }
+                                    is LifePurchaseResult.RequiresRealBilling -> {
+                                        selectedBrlPackage = pkg
+                                    }
+                                    is LifePurchaseResult.QuotaStillAvailable -> {
+                                        shopFeedback = (
+                                            if (isPt) "Disponível quando suas vidas chegarem a 0."
+                                            else "Available once your lives reach 0."
+                                        ) to false
+                                    }
+                                    is LifePurchaseResult.InsufficientFunds -> {
+                                        val unit = if (result.currency == LifePurchaseCurrency.XP) "XP"
+                                        else if (isPt) "cristais" else "crystals"
+                                        shopFeedback = (
+                                            if (isPt) "Precisa de ${result.required} $unit (tem ${result.available})."
+                                            else "Needs ${result.required} $unit (have ${result.available})."
+                                        ) to true
+                                    }
+                                    null -> Unit
+                                }
+                                result
+                            },
+                            onOpen3DGame = onOpen3DGame
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Diálogo informativo ao tocar na pill/card de Vidas Diárias.
+ * Quando a cota diária chega a 0, exibe também as opções de compra de vidas.
  */
 @Composable
 fun DailyLivesInfoDialog(
     livesInfo: DailyLivesInfo,
     language: Language,
+    availableXp: Int = 0,
+    availableCrystals: Int = 0,
+    onPurchaseLives: (LifeShopPackage) -> LifePurchaseResult? = { null },
+    onOpenLifeShop: (() -> Unit)? = null,
+    onOpen3DGame: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val isPt = language == Language.PT
+    val isDepleted = livesInfo.remaining <= 0
+    var purchaseFeedback by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(26.dp),
@@ -268,27 +1198,34 @@ fun DailyLivesInfoDialog(
                     modifier = Modifier.matchParentSize()
                 )
                 Column(
-                    modifier = Modifier.padding(22.dp),
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
+                            .size(68.dp)
                             .clip(CircleShape)
                             .background(Brush.linearGradient(listOf(HeartRose, HeartCoral)))
                             .border(2.5.dp, GoldSpark, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Favorite,
+                            imageVector = if (isDepleted) Icons.Default.ShoppingCart else Icons.Default.Favorite,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier.size(34.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = if (isPt) "Suas 25 Vidas Diárias ❤️✨" else "Your 25 Daily Lives ❤️✨",
+                        text = when {
+                            isDepleted && isPt -> "Cota Diária Esgotada ❤️🛒"
+                            isDepleted -> "Daily Quota Depleted ❤️🛒"
+                            isPt -> "Suas ${livesInfo.maxDaily} Vidas Diárias ❤️✨"
+                            else -> "Your ${livesInfo.maxDaily} Daily Lives ❤️✨"
+                        },
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
                         textAlign = TextAlign.Center
                     )
@@ -307,18 +1244,116 @@ fun DailyLivesInfoDialog(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = if (isPt) {
-                            "Todos os dias você recebe 25 vidas novinhas para praticar desafios e quizzes. Cada tentativa consome 1 vida — e sempre que você subir de nível, suas 25 vidas são restauradas na hora!"
-                        } else {
-                            "Every day you receive 25 fresh lives to solve coding challenges and quizzes. Each attempt costs 1 life — and every time you level up, all 25 lives reset back to full right away!"
+                        text = when {
+                            isDepleted && isPt -> {
+                                "Sua cota de ${livesInfo.maxDaily} vidas de hoje acabou! Compre pacotes de +10, +20 ou +50 vidas ou use seu XP / Diamantes 3D abaixo."
+                            }
+                            isDepleted -> {
+                                "Today's ${livesInfo.maxDaily} daily lives are used up! Buy +10, +20 or +50 extra lives or use your spendable XP / 3D Diamonds below."
+                            }
+                            isPt -> {
+                                "Todos os dias você recebe ${livesInfo.maxDaily} vidas novinhas para praticar desafios e quizzes. Toque em '+' para comprar pacotes ou assinar o Pro (R$ 13/mês)."
+                            }
+                            else -> {
+                                "Every day you receive ${livesInfo.maxDaily} fresh lives to solve coding challenges and quizzes. Tap '+' anytime to buy packs or go Pro (R$ 13/mo)."
+                            }
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(18.dp))
+
+                    if (onOpenLifeShop != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                onDismiss()
+                                onOpenLifeShop()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("btn_open_brl_life_shop_from_info")
+                        ) {
+                            Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isPt) "Comprar Vidas (R$ 5 / R$ 10 / R$ 35)" else "Buy Extra Lives (R$ 5 / 10 / 35)",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    if (isDepleted) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        LifePurchaseOptionsSection(
+                            language = language,
+                            availableXp = availableXp,
+                            availableCrystals = availableCrystals,
+                            feedbackMessage = purchaseFeedback?.first,
+                            isFeedbackError = purchaseFeedback?.second ?: false,
+                            onPurchasePackage = { pkg ->
+                                val result = onPurchaseLives(pkg)
+                                purchaseFeedback = when (result) {
+                                    is LifePurchaseResult.Success -> {
+                                        val msg = if (isPt) {
+                                            "❤️ +${result.pkg.livesAmount} vidas adicionadas! Novo saldo: ${result.newRemainingLives}"
+                                        } else {
+                                            "❤️ +${result.pkg.livesAmount} lives added! New balance: ${result.newRemainingLives}"
+                                        }
+                                        msg to false
+                                    }
+                                    is LifePurchaseResult.InsufficientFunds -> {
+                                        val unit = if (result.currency == LifePurchaseCurrency.XP) {
+                                            "XP"
+                                        } else if (isPt) {
+                                            "cristais 3D"
+                                        } else {
+                                            "3D crystals"
+                                        }
+                                        val msg = if (isPt) {
+                                            "Saldo insuficiente: precisa de ${result.required} $unit (disponível: ${result.available})."
+                                        } else {
+                                            "Insufficient funds: requires ${result.required} $unit (available: ${result.available})."
+                                        }
+                                        msg to true
+                                    }
+                                    is LifePurchaseResult.RequiresRealBilling -> {
+                                        onOpenLifeShop?.invoke()
+                                        null
+                                    }
+                                    is LifePurchaseResult.QuotaStillAvailable -> null
+                                    null -> null
+                                }
+                                result
+                            },
+                            onOpen3DGame = onOpen3DGame
+                        )
+                    } else if (purchaseFeedback?.second == false) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = EmeraldGlow.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, EmeraldGlow.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = purchaseFeedback?.first.orEmpty(),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldGlow,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = onDismiss,
                         colors = ButtonDefaults.buttonColors(containerColor = HeartRose),
@@ -705,14 +1740,22 @@ fun GentleRetryFeedbackDialog(
 }
 
 /**
- * Diálogo gentil exibido quando as 25 vidas diárias acabam.
+ * Diálogo exibido quando as 25 vidas diárias acabam, com opções imediatas de compra de vidas.
  */
 @Composable
 fun OutOfLivesDialog(
     language: Language,
+    availableXp: Int = 0,
+    availableCrystals: Int = 0,
+    maxDailyLives: Int = DailyLivesInfo.MAX_DAILY_LIVES,
+    onPurchaseLives: (LifeShopPackage) -> LifePurchaseResult? = { null },
+    onOpenLifeShop: (() -> Unit)? = null,
+    onOpen3DGame: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val isPt = language == Language.PT
+    var purchaseError by remember { mutableStateOf<String?>(null) }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(26.dp),
@@ -724,12 +1767,14 @@ fun OutOfLivesDialog(
                 .testTag("dialog_out_of_lives")
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
                     modifier = Modifier
-                        .size(74.dp)
+                        .size(66.dp)
                         .clip(CircleShape)
                         .background(Brush.linearGradient(listOf(PurplePrimary, HeartRose))),
                     contentAlignment = Alignment.Center
@@ -738,35 +1783,104 @@ fun OutOfLivesDialog(
                         imageVector = Icons.Default.NightsStay,
                         contentDescription = null,
                         tint = GoldSpark,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(34.dp)
                     )
                 }
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = if (isPt) "Vidas de Hoje Esgotadas 🌙💜" else "Today's Lives Reached 0 🌙💜",
+                    text = if (isPt) "Cota Diária Esgotada 🌙❤️" else "Daily Lives Reached 0 🌙❤️",
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = Color.White,
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = if (isPt) {
-                        "Você deu o seu máximo nas 25 tentativas de hoje! Aproveite para revisar o Cheatsheet e o Roadmap com calma — amanhã você receberá +25 vidas novinhas!"
+                        "Você usou suas $maxDailyLives vidas diárias! Compre +10, +20 ou +50 vidas ou resgate com XP / 50+ Diamantes 3D."
                     } else {
-                        "You gave it your all across today's 25 attempts! Take time to explore the Cheatsheet and Roadmap — 25 fresh lives arrive tomorrow!"
+                        "You used all $maxDailyLives daily lives! Buy +10, +20 or +50 extra lives or redeem XP / 50+ 3D Diamonds."
                     },
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFDCD6F7),
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(18.dp))
+
+                if (onOpenLifeShop != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onOpenLifeShop()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .testTag("btn_open_brl_life_shop_from_depleted")
+                    ) {
+                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isPt) "Abrir Loja (10/R$5 • 20/R$10 • 50/R$35)" else "Open Life Shop (R$ 5 / 10 / 35)",
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                LifePurchaseOptionsSection(
+                    language = language,
+                    availableXp = availableXp,
+                    availableCrystals = availableCrystals,
+                    feedbackMessage = purchaseError,
+                    isFeedbackError = true,
+                    darkSurface = true,
+                    onPurchasePackage = { pkg ->
+                        val result = onPurchaseLives(pkg)
+                        when (result) {
+                            is LifePurchaseResult.Success -> {
+                                purchaseError = null
+                                onDismiss()
+                            }
+                            is LifePurchaseResult.InsufficientFunds -> {
+                                val unit = when (result.currency) {
+                                    LifePurchaseCurrency.BRL -> "R$"
+                                    LifePurchaseCurrency.XP -> "XP"
+                                    LifePurchaseCurrency.CRYSTALS -> if (isPt) "cristais 3D" else "3D crystals"
+                                }
+                                purchaseError = if (isPt) {
+                                    "Saldo insuficiente: precisa de ${result.required} $unit (disponível: ${result.available})."
+                                } else {
+                                    "Insufficient balance: requires ${result.required} $unit (available: ${result.available})."
+                                }
+                            }
+                            is LifePurchaseResult.RequiresRealBilling -> {
+                                purchaseError = null
+                                onOpenLifeShop?.invoke()
+                            }
+                            is LifePurchaseResult.QuotaStillAvailable -> {
+                                purchaseError = null
+                                onDismiss()
+                            }
+                            null -> Unit
+                        }
+                        result
+                    },
+                    onOpen3DGame = onOpen3DGame
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
                 Button(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = RedAccent),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF332A4D)),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(46.dp)
                 ) {
                     Text(
                         text = if (isPt) "Revisar Conteúdo ✨" else "Review Study Guides ✨",
@@ -1121,8 +2235,8 @@ fun LevelRoadmapDialog(
                         Icon(Icons.Default.Favorite, contentDescription = null, tint = HeartRose, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isPt) "Subir de nível exige mais XP, mas restaura suas 25 vidas na hora!"
-                            else "Higher levels take more XP, and every level-up restores all 25 lives!",
+                            text = if (isPt) "Subir de nível exige mais XP, mas restaura todas as suas vidas diárias na hora!"
+                            else "Higher levels take more XP, and every level-up restores all your daily lives!",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface

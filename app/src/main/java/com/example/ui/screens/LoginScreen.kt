@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -112,6 +114,12 @@ private val RedAccent: Color
 
 private const val TAG = "LoginScreen"
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @Composable
 fun LoginScreen(
     language: Language,
@@ -122,10 +130,9 @@ fun LoginScreen(
     onExploreWithoutAuth: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isPt = language == Language.PT
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
+    val credentialManager = remember(context) { CredentialManager.create(context) }
 
     var localLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -187,7 +194,7 @@ fun LoginScreen(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "DevRoutine AI",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -208,13 +215,15 @@ fun LoginScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.LangIcon,
-                            contentDescription = "Language",
+                            contentDescription = stringResource(R.string.action_toggle_language),
                             tint = PurplePrimaryLight,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isPt) "PT-BR" else "EN-US",
+                            text = stringResource(
+                                if (language == Language.PT) R.string.lang_short_pt else R.string.lang_short_en
+                            ),
                             style = MaterialTheme.typography.labelMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -270,7 +279,7 @@ fun LoginScreen(
 
             // Main Title & Subtitle
             Text(
-                text = if (isPt) "Seu Ecossistema Dev" else "Your Dev Ecosystem",
+                text = stringResource(R.string.login_hero_title),
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 28.sp,
@@ -280,10 +289,7 @@ fun LoginScreen(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = if (isPt)
-                    "Pratique 840+ desafios, suba no ranking global com Cloud Firestore e impulsione seus estudos com IA."
-                else
-                    "Practice 840+ challenges, climb the global leaderboard with Cloud Firestore, and boost your journey with AI.",
+                text = stringResource(R.string.login_hero_subtitle),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 20.sp
@@ -355,23 +361,20 @@ fun LoginScreen(
                     FeatureHighlightRow(
                         icon = Icons.Default.Terminal,
                         iconTint = PurplePrimaryLight,
-                        title = if (isPt) "840+ Desafios Práticos Balanceados" else "840+ Balanced Coding Challenges",
-                        description = if (isPt) "35 Iniciante, 35 Intermediário e 35 Avançado para 8 tecnologias."
-                        else "35 Beginner, 35 Intermediate & 35 Advanced for 8 technologies."
+                        title = stringResource(R.string.login_feature_challenges_title),
+                        description = stringResource(R.string.login_feature_challenges_desc)
                     )
                     FeatureHighlightRow(
                         icon = Icons.Default.EmojiEvents,
                         iconTint = RedAccent,
-                        title = if (isPt) "Placar de Líderes em Tempo Real" else "Real-time Developer Leaderboard",
-                        description = if (isPt) "Sincronização na nuvem com XP, níveis e distintivos exclusivos."
-                        else "Cloud-backed sync with XP, dev levels, and collectible badges."
+                        title = stringResource(R.string.login_feature_leaderboard_title),
+                        description = stringResource(R.string.login_feature_leaderboard_desc)
                     )
                     FeatureHighlightRow(
                         icon = Icons.Default.CloudDone,
                         iconTint = TechMySqlColor,
-                        title = if (isPt) "Progresso Diário no Cloud Firestore" else "Daily Tracking in Cloud Firestore",
-                        description = if (isPt) "Acompanhe seus estudos diários com segurança garantida."
-                        else "Track your daily study routines safely backed by Firebase."
+                        title = stringResource(R.string.login_feature_firestore_title),
+                        description = stringResource(R.string.login_feature_firestore_desc)
                     )
                 }
             }
@@ -418,10 +421,14 @@ fun LoginScreen(
                             }
 
                             if (clientId.isBlank()) {
-                                errorMessage = if (isPt)
-                                    "Configuração do Google Sign-In não encontrada no projeto."
-                                else
-                                    "Google Sign-In configuration missing in project."
+                                errorMessage = context.getString(R.string.login_error_missing_google_config)
+                                localLoading = false
+                                return@launch
+                            }
+
+                            val activityContext = context.findActivity()
+                            if (activityContext == null) {
+                                errorMessage = context.getString(R.string.login_error_auth_failed)
                                 localLoading = false
                                 return@launch
                             }
@@ -434,7 +441,7 @@ fun LoginScreen(
 
                             val result = credentialManager.getCredential(
                                 request = request,
-                                context = context as Activity
+                                context = activityContext
                             )
                             val credential = result.credential
 
@@ -448,7 +455,7 @@ fun LoginScreen(
                                     googleIdToken.profilePictureUri?.toString()
                                 )
                             } else {
-                                errorMessage = if (isPt) "Tipo de credencial inválido" else "Unexpected credential type"
+                                errorMessage = context.getString(R.string.login_error_unexpected_credential)
                                 localLoading = false
                             }
                         } catch (e: GetCredentialCancellationException) {
@@ -456,7 +463,7 @@ fun LoginScreen(
                             localLoading = false
                         } catch (e: Exception) {
                             Log.e(TAG, "Google Sign-In failed", e)
-                            errorMessage = e.localizedMessage ?: if (isPt) "Falha na autenticação" else "Authentication failed"
+                            errorMessage = e.localizedMessage ?: context.getString(R.string.login_error_auth_failed)
                             localLoading = false
                         }
                     }
@@ -482,7 +489,7 @@ fun LoginScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (isPt) "Autenticando..." else "Signing in...",
+                        text = stringResource(R.string.login_signing_in),
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
@@ -494,7 +501,7 @@ fun LoginScreen(
                         GoogleLogoIcon(modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = if (isPt) "Entrar com o Google" else "Sign in with Google",
+                            text = stringResource(R.string.login_sign_in_google),
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
@@ -522,10 +529,7 @@ fun LoginScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isPt)
-                        "Ou registrar perfil com telefone"
-                    else
-                        "Or sign in with phone number",
+                    text = stringResource(R.string.login_phone_toggle),
                     style = MaterialTheme.typography.bodySmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
@@ -533,7 +537,7 @@ fun LoginScreen(
                 )
                 Icon(
                     imageVector = if (showPhoneSection) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Toggle",
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp)
                 )
@@ -565,7 +569,7 @@ fun LoginScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = if (isPt) "Cadastro Rápido com Telefone" else "Quick Phone Sign-In",
+                            text = stringResource(R.string.login_phone_card_title),
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -575,7 +579,7 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = phoneName,
                             onValueChange = { phoneName = it },
-                            label = { Text(if (isPt) "Seu Nome ou Apelido Dev" else "Your Name / Dev Handle") },
+                            label = { Text(stringResource(R.string.login_phone_name_label)) },
                             leadingIcon = {
                                 Icon(Icons.Default.Person, contentDescription = null, tint = PurplePrimary)
                             },
@@ -592,7 +596,7 @@ fun LoginScreen(
                         OutlinedTextField(
                             value = phoneNumber,
                             onValueChange = { phoneNumber = it },
-                            label = { Text(if (isPt) "Número com DDD (ex: 11999998888)" else "Phone number (with area code)") },
+                            label = { Text(stringResource(R.string.login_phone_number_label)) },
                             leadingIcon = {
                                 Icon(Icons.Default.Phone, contentDescription = null, tint = RedAccent)
                             },
@@ -614,7 +618,7 @@ fun LoginScreen(
                                 if (cleanPhone.length >= 8) {
                                     onPhoneSignInSuccess(cleanName, cleanPhone)
                                 } else {
-                                    errorMessage = if (isPt) "Digite um número de telefone válido" else "Please enter a valid phone number"
+                                    errorMessage = context.getString(R.string.login_phone_invalid_error)
                                 }
                             },
                             enabled = !activeLoading && phoneNumber.isNotBlank(),
@@ -629,7 +633,7 @@ fun LoginScreen(
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(
-                                text = if (isPt) "Entrar com Telefone" else "Enter with Phone",
+                                text = stringResource(R.string.login_phone_enter_btn),
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -651,7 +655,7 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                 )
                 Text(
-                    text = if (isPt) "ou" else "or",
+                    text = stringResource(R.string.login_or),
                     modifier = Modifier.padding(horizontal = 12.dp),
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -688,7 +692,7 @@ fun LoginScreen(
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = if (isPt) "Explorar primeiro (Modo Visitante)" else "Explore first (Guest Mode)",
+                        text = stringResource(R.string.login_guest_continue),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.SemiBold
                         )
@@ -696,7 +700,7 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "Continuar",
+                        contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -711,16 +715,13 @@ fun LoginScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.CheckCircle,
-                    contentDescription = "Segurança",
+                    contentDescription = null,
                     tint = PurplePrimaryLight,
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isPt)
-                        "Autenticação protegida por Firebase Auth & App Check"
-                    else
-                        "Protected by Firebase Auth & App Check",
+                    text = stringResource(R.string.login_security_note),
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         fontSize = 11.sp

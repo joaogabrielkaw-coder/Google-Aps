@@ -1626,6 +1626,61 @@ class ExampleUnitTest {
     )
   }
 
+  @Test
+  fun playBillingHelpers_sanitizesAccountIds_mapsSubResponseErrors_andFormatsUnfetchedSkus() {
+    // 1. Account ID sanitization respects Play's 64-char limit
+    assertNull(com.example.billing.PlayBillingHelpers.sanitizeObfuscatedAccountId(null))
+    assertNull(com.example.billing.PlayBillingHelpers.sanitizeObfuscatedAccountId("   "))
+    assertEquals("uid_12345", com.example.billing.PlayBillingHelpers.sanitizeObfuscatedAccountId("  uid_12345  "))
+    val longUid = "a".repeat(80)
+    val hashed1 = com.example.billing.PlayBillingHelpers.sanitizeObfuscatedAccountId(longUid)
+    val hashed2 = com.example.billing.PlayBillingHelpers.sanitizeObfuscatedAccountId(longUid)
+    assertNotNull(hashed1)
+    assertEquals(64, hashed1!!.length)
+    assertEquals(hashed1, hashed2)
+
+    // 2. Billing v9 SubResponseCode and core response code mapping
+    val insufficientFundsPt = com.example.billing.PlayBillingHelpers.mapBillingErrorMessage(
+      responseCode = com.android.billingclient.api.BillingClient.BillingResponseCode.USER_CANCELED,
+      subResponseCode = com.android.billingclient.api.BillingClient.OnPurchasesUpdatedSubResponseCode.PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS,
+      isPt = true
+    )
+    assertTrue(insufficientFundsPt.contains("saldo insuficiente", ignoreCase = true))
+
+    val unavailableEn = com.example.billing.PlayBillingHelpers.mapBillingErrorMessage(
+      responseCode = com.android.billingclient.api.BillingClient.BillingResponseCode.BILLING_UNAVAILABLE,
+      isPt = false
+    )
+    assertTrue(unavailableEn.contains("unavailable", ignoreCase = true))
+
+    // 3. UnfetchedProduct status formatting
+    val notFoundPt = com.example.billing.PlayBillingHelpers.formatUnfetchedProductError(
+      productId = "study_pack_sql_mastery",
+      statusCode = com.android.billingclient.api.UnfetchedProduct.StatusCode.PRODUCT_NOT_FOUND,
+      isPt = true
+    )
+    assertTrue(notFoundPt.contains("study_pack_sql_mastery"))
+    assertTrue(notFoundPt.contains("Play Console", ignoreCase = true))
+
+    val noOfferEn = com.example.billing.PlayBillingHelpers.formatUnfetchedProductError(
+      productId = "devroutine_pro_monthly",
+      statusCode = com.android.billingclient.api.UnfetchedProduct.StatusCode.NO_ELIGIBLE_OFFER,
+      isPt = false
+    )
+    assertTrue(noOfferEn.contains("devroutine_pro_monthly"))
+    assertTrue(noOfferEn.contains("offer", ignoreCase = true))
+
+    // 4. PlayBillingStoreUiState product readiness & active purchase tracking
+    val storeState = com.example.model.PlayBillingStoreUiState(
+      connectionStatus = com.example.model.PlayBillingConnectionStatus.READY,
+      availableProductIds = setOf("lives_brl_10"),
+      activePurchaseProductId = "lives_brl_10",
+      isPurchaseInProgress = true
+    )
+    assertTrue(storeState.isProductReadyInPlay("lives_brl_10"))
+    assertFalse(storeState.isProductReadyInPlay("lives_brl_20"))
+  }
+
   private class InMemorySharedPreferences : android.content.SharedPreferences {
     private val data = mutableMapOf<String, Any?>()
     override fun getAll(): MutableMap<String, *> = data.toMutableMap()

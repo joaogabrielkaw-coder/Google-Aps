@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,6 +94,7 @@ fun StudyMaterialsStoreScreen(
     onBack: () -> Unit,
     onPurchasePackage: (String) -> Unit,
     onRefreshCatalog: () -> Unit,
+    onAutoRefreshCatalog: () -> Unit = onRefreshCatalog,
     onRestorePurchases: () -> Unit,
     onDismissStatusMessage: () -> Unit
 ) {
@@ -124,6 +126,12 @@ fun StudyMaterialsStoreScreen(
 
     val unlockedCount = remember(billingItems) { billingItems.count { it.isOwned } }
     val liveSkuCount = remember(billingItems) { billingItems.count { it.isAvailableInPlay } }
+
+    LaunchedEffect(Unit) {
+        if (billingStoreState.connectionStatus != PlayBillingConnectionStatus.READY || liveSkuCount == 0) {
+            onAutoRefreshCatalog()
+        }
+    }
 
     readerPackage?.let { activePkg ->
         StudyMaterialReaderDialog(
@@ -203,6 +211,74 @@ fun StudyMaterialsStoreScreen(
                             contentDescription = if (isPt) "Atualizar produtos do Play" else "Refresh Play products",
                             tint = brand.primary
                         )
+                    }
+                }
+            }
+
+            // Pinned BillingClient Status / Error / Pending Feedback Banner (always visible when scrolled)
+            AnimatedVisibility(visible = !billingStoreState.statusMessage.isNullOrBlank()) {
+                val message = billingStoreState.statusMessage.orEmpty()
+                val isErr = billingStoreState.isError
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isErr) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.primaryContainer
+                    },
+                    border = BorderStroke(
+                        1.dp,
+                        if (isErr) MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                        else brand.primary.copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .testTag("banner_study_billing_status")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = message,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isErr) {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isErr) {
+                            IconButton(
+                                onClick = onRefreshCatalog,
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("btn_retry_study_billing")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = if (isPt) "Tentar novamente" else "Retry",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onDismissStatusMessage,
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = if (isPt) "Fechar aviso" else "Dismiss message",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -348,60 +424,6 @@ fun StudyMaterialsStoreScreen(
                     }
                 }
 
-                // BillingClient Status / Error / Pending Feedback Banner
-                item {
-                    AnimatedVisibility(visible = !billingStoreState.statusMessage.isNullOrBlank()) {
-                        val message = billingStoreState.statusMessage.orEmpty()
-                        val isErr = billingStoreState.isError
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isErr) {
-                                MaterialTheme.colorScheme.errorContainer
-                            } else {
-                                MaterialTheme.colorScheme.primaryContainer
-                            },
-                            border = BorderStroke(
-                                1.dp,
-                                if (isErr) MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
-                                else brand.primary.copy(alpha = 0.45f)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("banner_study_billing_status")
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = message,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (isErr) {
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = onDismissStatusMessage,
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = if (isPt) "Fechar aviso" else "Dismiss message",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Category Filter Chips
                 item {
                     LazyRow(
@@ -448,6 +470,7 @@ fun StudyMaterialsStoreScreen(
                         item = item,
                         language = language,
                         isPurchaseInProgress = billingStoreState.isPurchaseInProgress,
+                        activePurchaseProductId = billingStoreState.activePurchaseProductId,
                         onPurchaseClick = { onPurchasePackage(item.pkg.productId) },
                         onOpenMaterialClick = { readerPackage = item.pkg }
                     )
@@ -552,6 +575,7 @@ private fun StudyMaterialPackageCard(
     item: StudyMaterialBillingItem,
     language: Language,
     isPurchaseInProgress: Boolean,
+    activePurchaseProductId: String? = null,
     onPurchaseClick: () -> Unit,
     onOpenMaterialClick: () -> Unit
 ) {
@@ -559,6 +583,8 @@ private fun StudyMaterialPackageCard(
     val pkg = item.pkg
     val accent = pkg.accentColor()
     val formattedPrice = item.formattedPrice(language)
+    val isThisCardLoading = isPurchaseInProgress &&
+        (activePurchaseProductId == pkg.productId || activePurchaseProductId == null)
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -657,7 +683,7 @@ private fun StudyMaterialPackageCard(
                             text = if (item.isAvailableInPlay) {
                                 if (isPt) "SKU Play Ativo" else "Live Play SKU"
                             } else {
-                                pkg.productId
+                                if (isPt) "SKU pendente • ${pkg.productId}" else "SKU pending • ${pkg.productId}"
                             },
                             fontSize = 9.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -828,7 +854,7 @@ private fun StudyMaterialPackageCard(
                                 .height(48.dp)
                                 .testTag("btn_buy_study_material_${pkg.productId}")
                         ) {
-                            if (isPurchaseInProgress) {
+                            if (isThisCardLoading) {
                                 CircularProgressIndicator(
                                     color = Color.White,
                                     strokeWidth = 2.dp,

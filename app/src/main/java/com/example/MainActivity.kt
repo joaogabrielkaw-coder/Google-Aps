@@ -50,6 +50,8 @@ import androidx.credentials.GetCredentialRequest
 import com.example.model.ChatCallStatus
 import com.example.model.ChatRequestStatus
 import com.example.model.Language
+import com.example.model.LifeShopCatalog
+import com.example.model.PlayBillingConnectionStatus
 import com.example.model.ProSubscriptionPlan
 import com.example.model.ThemePreference
 import com.example.model.UserAccount
@@ -140,6 +142,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     MainAppContainer(
                         viewModel = viewModel,
+                        hostActivity = this@MainActivity,
                         isDarkTheme = isDarkTheme,
                         currentLanguage = language,
                         currentTheme = themePreference
@@ -153,6 +156,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppContainer(
     viewModel: MainViewModel,
+    hostActivity: Activity,
     isDarkTheme: Boolean,
     currentLanguage: Language,
     currentTheme: ThemePreference
@@ -290,6 +294,27 @@ fun MainAppContainer(
     LaunchedEffect(Unit) {
         viewModel.refreshDailyLivesIfNewDay()
         viewModel.refreshDailyScreenTimeIfNewDay()
+    }
+
+    LaunchedEffect(showLifePurchaseShopDialog) {
+        if (showLifePurchaseShopDialog) {
+            val allLivesSkusLoaded = LifeShopCatalog.brlPackages.all { pkg ->
+                pkg.playProductId != null && billingStoreState.isProductReadyInPlay(pkg.playProductId)
+            }
+            if (billingStoreState.connectionStatus != PlayBillingConnectionStatus.READY || !allLivesSkusLoaded) {
+                viewModel.refreshStudyMaterialsCatalog(userInitiated = false)
+            }
+        }
+    }
+
+    LaunchedEffect(showProSubscriptionDialog) {
+        if (showProSubscriptionDialog) {
+            if (billingStoreState.connectionStatus != PlayBillingConnectionStatus.READY ||
+                !billingStoreState.isProductReadyInPlay(ProSubscriptionPlan.PRODUCT_ID_PRO_MONTHLY)
+            ) {
+                viewModel.refreshStudyMaterialsCatalog(userInitiated = false)
+            }
+        }
     }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -737,11 +762,10 @@ fun MainAppContainer(
                         ownedProductIds = ownedStudyMaterialIds,
                         onBack = { viewModel.navigateTo(AppDestination.HOME) },
                         onPurchasePackage = { productId ->
-                            context.findActivity()?.let { activity ->
-                                viewModel.launchStudyMaterialBilling(activity, productId)
-                            }
+                            viewModel.launchStudyMaterialBilling(hostActivity, productId)
                         },
-                        onRefreshCatalog = { viewModel.refreshStudyMaterialsCatalog() },
+                        onRefreshCatalog = { viewModel.refreshStudyMaterialsCatalog(userInitiated = true) },
+                        onAutoRefreshCatalog = { viewModel.refreshStudyMaterialsCatalog(userInitiated = false) },
                         onRestorePurchases = { viewModel.restorePlayPurchases() },
                         onDismissStatusMessage = { viewModel.clearBillingStatusMessage() }
                     )
@@ -946,11 +970,10 @@ fun MainAppContainer(
             externalConfirmedReceipt = lastLifePurchaseReceipt,
             onPurchaseLives = { pkg, method -> viewModel.purchaseLives(pkg, method) },
             onLaunchRealBrlPurchase = { pkg ->
-                context.findActivity()?.let { activity ->
-                    viewModel.launchLifePackBilling(activity, pkg)
-                }
+                viewModel.launchLifePackBilling(hostActivity, pkg)
             },
             onRestorePurchases = { viewModel.restorePlayPurchases() },
+            onRefreshBilling = { viewModel.refreshStudyMaterialsCatalog() },
             onClearExternalReceipt = { viewModel.clearLastLifePurchaseReceipt() },
             onOpenProSubscription = { showProSubscriptionDialog = true },
             onOpen3DGame = {
@@ -972,11 +995,10 @@ fun MainAppContainer(
             language = currentLanguage,
             billingStoreState = billingStoreState,
             onSubscribeWithPlay = {
-                context.findActivity()?.let { activity ->
-                    viewModel.launchProSubscriptionBilling(activity)
-                }
+                viewModel.launchProSubscriptionBilling(hostActivity)
             },
             onRestorePurchases = { viewModel.restorePlayPurchases() },
+            onRefreshBilling = { viewModel.refreshStudyMaterialsCatalog() },
             onManageInPlayStore = {
                 val uri = Uri.parse(
                     "https://play.google.com/store/account/subscriptions?sku=${ProSubscriptionPlan.PRODUCT_ID_PRO_MONTHLY}&package=${context.packageName}"

@@ -24,11 +24,13 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -425,6 +427,7 @@ fun ProSubscriptionDialog(
     billingStoreState: PlayBillingStoreUiState = PlayBillingStoreUiState(),
     onSubscribeWithPlay: () -> Unit = {},
     onRestorePurchases: () -> Unit = {},
+    onRefreshBilling: () -> Unit = {},
     onManageInPlayStore: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
@@ -735,12 +738,20 @@ fun ProSubscriptionDialog(
                             .height(50.dp)
                             .testTag("btn_confirm_pro_subscription")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.WorkspacePremium,
-                            contentDescription = null,
-                            tint = Color(0xFF1F1638),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        if (billingStoreState.isPurchaseInProgress) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF1F1638),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.WorkspacePremium,
+                                contentDescription = null,
+                                tint = Color(0xFF1F1638),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (billingStoreState.isPurchaseInProgress) {
@@ -753,6 +764,34 @@ fun ProSubscriptionDialog(
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF1F1638)
                         )
+                    }
+
+                    if (billingStoreState.connectionStatus != PlayBillingConnectionStatus.READY ||
+                        billingStoreState.isError
+                    ) {
+                        OutlinedButton(
+                            onClick = onRefreshBilling,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, GoldCrown.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .testTag("btn_refresh_pro_billing")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                tint = GoldCrown,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isPt) "Reconectar / Atualizar Google Play" else "Reconnect / Refresh Google Play",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldCrown
+                            )
+                        }
                     }
 
                     OutlinedButton(

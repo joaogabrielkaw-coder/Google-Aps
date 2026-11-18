@@ -49,6 +49,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -358,6 +359,7 @@ fun LifePurchaseOptionsSection(
     feedbackMessage: String? = null,
     isFeedbackError: Boolean = false,
     darkSurface: Boolean = false,
+    isLockedByQuota: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isPt = language == Language.PT
@@ -440,11 +442,12 @@ fun LifePurchaseOptionsSection(
                 }
                 val isCrystalPack = pkg.currency == LifePurchaseCurrency.CRYSTALS
                 val pillColor = when {
-                    !canAfford -> Color(0xFF3E3854)
+                    isLockedByQuota || !canAfford -> Color(0xFF3E3854)
                     isCrystalPack -> Color(0xFF15803D)
                     else -> HeartRose
                 }
                 val borderColor = when {
+                    isLockedByQuota -> Color(0xFF2E2842)
                     canAfford && isCrystalPack -> EmeraldGlow.copy(alpha = 0.45f)
                     canAfford -> HeartRose.copy(alpha = 0.45f)
                     else -> Color(0xFF2E2842)
@@ -473,16 +476,16 @@ fun LifePurchaseOptionsSection(
                             horizontalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Favorite,
+                                imageVector = if (isLockedByQuota) Icons.Default.Lock else Icons.Default.Favorite,
                                 contentDescription = null,
-                                tint = HeartRose,
+                                tint = if (isLockedByQuota) Color(0xFF9E96BD) else HeartRose,
                                 modifier = Modifier.size(13.dp)
                             )
                             Text(
                                 text = "+${pkg.livesAmount}",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = titleColor
+                                color = if (isLockedByQuota) Color(0xFFB8B0D8) else titleColor
                             )
                         }
 
@@ -551,6 +554,7 @@ fun LifePurchaseShopDialog(
     onPurchaseLives: (LifeShopPackage, LifePaymentMethod?) -> LifePurchaseResult?,
     onLaunchRealBrlPurchase: (LifeShopPackage) -> Unit = {},
     onRestorePurchases: () -> Unit = {},
+    onRefreshBilling: () -> Unit = {},
     onClearExternalReceipt: () -> Unit = {},
     onOpenProSubscription: (() -> Unit)? = null,
     onOpen3DGame: (() -> Unit)? = null,
@@ -917,6 +921,14 @@ fun LifePurchaseShopDialog(
                                     .height(44.dp)
                                     .testTag("btn_confirm_brl_purchase")
                             ) {
+                                if (billingStoreState.isPurchaseInProgress) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
                                 Text(
                                     text = if (billingStoreState.isPurchaseInProgress) {
                                         if (isPt) "Abrindo Play..." else "Opening Play..."
@@ -925,6 +937,34 @@ fun LifePurchaseShopDialog(
                                     },
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        if (billingStoreState.connectionStatus != PlayBillingConnectionStatus.READY ||
+                            billingStoreState.isError
+                        ) {
+                            OutlinedButton(
+                                onClick = onRefreshBilling,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, SoftLavender.copy(alpha = 0.55f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .testTag("btn_refresh_life_billing")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = SoftLavender,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isPt) "Reconectar / Atualizar Google Play" else "Reconnect / Refresh Google Play",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                             }
@@ -1121,6 +1161,7 @@ fun LifePurchaseShopDialog(
                             } else null,
                             isFeedbackError = shopFeedback?.second ?: false,
                             darkSurface = true,
+                            isLockedByQuota = livesInfo.remaining > 0,
                             onPurchasePackage = { pkg ->
                                 val result = onPurchaseLives(pkg, null)
                                 when (result) {
@@ -1137,8 +1178,8 @@ fun LifePurchaseShopDialog(
                                     }
                                     is LifePurchaseResult.QuotaStillAvailable -> {
                                         shopFeedback = (
-                                            if (isPt) "Disponível quando suas vidas chegarem a 0."
-                                            else "Available once your lives reach 0."
+                                            if (isPt) "Grátis com XP/Cristais desbloqueia quando suas vidas chegarem a 0 (restam ${livesInfo.remaining} ❤️). Pacotes em R$ funcionam agora."
+                                            else "Free XP/Crystal packs unlock once lives reach 0 (${livesInfo.remaining} ❤️ left). R$ packs work anytime."
                                         ) to false
                                     }
                                     is LifePurchaseResult.InsufficientFunds -> {
@@ -1325,6 +1366,7 @@ fun DailyLivesInfoDialog(
                                         msg to true
                                     }
                                     is LifePurchaseResult.RequiresRealBilling -> {
+                                        onDismiss()
                                         onOpenLifeShop?.invoke()
                                         null
                                     }
@@ -1860,6 +1902,7 @@ fun OutOfLivesDialog(
                             }
                             is LifePurchaseResult.RequiresRealBilling -> {
                                 purchaseError = null
+                                onDismiss()
                                 onOpenLifeShop?.invoke()
                             }
                             is LifePurchaseResult.QuotaStillAvailable -> {

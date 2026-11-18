@@ -38,8 +38,10 @@ data class PlayBillingStoreUiState(
     val availableProductIds: Set<String> = emptySet(),
     val pendingProductIds: Set<String> = emptySet(),
     val isPurchaseInProgress: Boolean = false,
+    val activePurchaseProductId: String? = null,
     val statusMessage: String? = null,
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val lastBillingResponseCode: Int? = null
 ) {
     fun isProductReadyInPlay(productId: String): Boolean =
         connectionStatus == PlayBillingConnectionStatus.READY && productId in availableProductIds

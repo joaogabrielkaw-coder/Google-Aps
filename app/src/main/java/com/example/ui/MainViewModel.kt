@@ -817,8 +817,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         playBillingManager.launchPurchase(activity, ProSubscriptionPlan.PRODUCT_ID_PRO_MONTHLY)
     }
 
-    fun refreshStudyMaterialsCatalog() {
-        playBillingManager.refreshCatalogAndPurchases()
+    fun refreshStudyMaterialsCatalog(userInitiated: Boolean = true) {
+        playBillingManager.refreshCatalogAndPurchases(userInitiated = userInitiated)
     }
 
     fun restorePlayPurchases() {

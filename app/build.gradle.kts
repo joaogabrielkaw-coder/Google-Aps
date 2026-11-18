@@ -140,7 +140,47 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
+  // "ksp"(libs.moshi.kotlin.codegen)
+}
+
+// Unit/instrumented tests do not define any KSP processors; skipping empty KSP tasks avoids
+// redundant daemon worker teardowns during test runs.
+tasks.matching {
+  it.name.startsWith("ksp") && (it.name.contains("UnitTest") || it.name.contains("AndroidTest"))
+}.configureEach {
+  enabled = false
+}
+
+// Work around upstream KSP2 (2.3.x) race where BinaryFileTypeDecompilers schedules an AWT
+// EventQueue callback just before KspAAWorkerAction disposes ApplicationManager.
+tasks.matching {
+  it.name.startsWith("ksp") && it.name.endsWith("Kotlin")
+}.configureEach {
+  doFirst {
+    val guardKey = "devroutine.kspAwtHandlerInstalled"
+    if (System.getProperty(guardKey) == null) {
+      synchronized(System::class.java) {
+        if (System.getProperty(guardKey) == null) {
+          val previous = Thread.getDefaultUncaughtExceptionHandler()
+          Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            val message = throwable.message.orEmpty()
+            val isKspDisposalRace = thread.name.startsWith("AWT-EventQueue") &&
+              throwable is NullPointerException &&
+              message.contains("ksp.com.intellij.openapi.application.ApplicationManager.getApplication()")
+            if (!isKspDisposalRace) {
+              if (previous != null) {
+                previous.uncaughtException(thread, throwable)
+              } else {
+                System.err.println("Exception in thread \"${thread.name}\" $throwable")
+                throwable.printStackTrace(System.err)
+              }
+            }
+          }
+          System.setProperty(guardKey, "true")
+        }
+      }
+    }
+  }
 }
 
 tasks.withType<Test> {

@@ -1,14 +1,19 @@
 package com.example.notification
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -60,8 +65,17 @@ class StudyReminderWorker(
 
             val contentText = if (time.isNotBlank()) "Às $time • $topic" else topic
 
+            if (!hasPostNotificationsPermission(applicationContext)) {
+                Log.w(TAG, "POST_NOTIFICATIONS permission not granted; skipping reminder notification")
+                return Result.success()
+            }
+
             val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setColor(ContextCompat.getColor(applicationContext, R.color.notification_accent))
+                .apply {
+                    loadNotificationLargeIcon(applicationContext)?.let { setLargeIcon(it) }
+                }
                 .setContentTitle("⏰ $techName: $title")
                 .setContentText(contentText)
                 .setStyle(NotificationCompat.BigTextStyle().bigText("Seu estudo de $techName está agendado agora!\n$contentText\nAbra o DevRoutine para praticar e acumular pontos de XP!"))
@@ -92,6 +106,27 @@ class StudyReminderWorker(
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 notificationManager?.createNotificationChannel(channel)
             }
+        }
+
+        fun hasPostNotificationsPermission(context: Context): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+            return ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        internal fun loadNotificationLargeIcon(context: Context): Bitmap? {
+            return runCatching {
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = 4
+                }
+                BitmapFactory.decodeResource(
+                    context.resources,
+                    R.drawable.ic_launcher_modern_black_1794996514891,
+                    options
+                )
+            }.getOrNull()
         }
     }
 }
@@ -196,8 +231,17 @@ object NotificationScheduler {
             val body = if (isPt) "O sistema de notificações push locais com WorkManager está funcionando perfeitamente! Seus estudos agendados serão avisados aqui."
             else "Local push notification system with WorkManager is working perfectly! Your scheduled sessions will be reminded here."
 
+            if (!StudyReminderWorker.hasPostNotificationsPermission(context)) {
+                Log.w(TAG, "POST_NOTIFICATIONS permission not granted; skipping test notification")
+                return
+            }
+
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setColor(ContextCompat.getColor(context, R.color.notification_accent))
+                .apply {
+                    StudyReminderWorker.loadNotificationLargeIcon(context)?.let { setLargeIcon(it) }
+                }
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
